@@ -6,8 +6,7 @@ import {
   deleteDoc, 
   serverTimestamp,
   arrayUnion,
-  arrayRemove,
-  Timestamp
+  arrayRemove
 } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import type { Candidate, JudgeName, EvaluationItem } from '../types';

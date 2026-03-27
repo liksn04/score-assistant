@@ -14,20 +14,23 @@ import type { Candidate, JudgeName, EvaluationItem } from './types';
 import { JUDGES, EVALUATION_ITEMS, JUDGE_SCORE_LIMITS, SIMPLE_JUDGES } from './types';
 import { 
   Users, 
-  Trophy, 
+  Star, 
+  LogOut, 
   UserPlus, 
+  Trophy, 
+  X, 
   Trash2, 
-  LogOut,
-  Star,
-  MessageSquare,
   Send,
-  X
+  MessageSquare,
+  ChevronDown, 
+  ChevronUp 
 } from 'lucide-react';
 import { arrayUnion, arrayRemove } from 'firebase/firestore';
 
 const App: React.FC = () => {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [selectedJudge, setSelectedJudge] = useState<JudgeName | null>(null);
+  const isObserver = selectedJudge === '참관자';
   const [newCandidateName, setNewCandidateName] = useState('');
   const [newSongTitle, setNewSongTitle] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -366,33 +369,35 @@ const App: React.FC = () => {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
               <Star color="#fbbf24" fill="#fbbf24" />
-              <h2 style={{ fontSize: '1.8rem' }}>{selectedJudge} 심사위원 대시보드</h2>
+              <h2 style={{ fontSize: '1.8rem' }}>{isObserver ? '참관자 모니터링 대시보드' : `${selectedJudge} 심사위원 대시보드`}</h2>
             </div>
             <button className="premium-button logout-btn" style={{ background: 'rgba(244, 63, 94, 0.1)', color: '#f43f5e', border: '1px solid rgba(244, 63, 94, 0.2)' }} onClick={() => setSelectedJudge(null)}>
-              <LogOut size={18} style={{ marginRight: '0.5rem' }} /> 심사 종료
+              <LogOut size={18} style={{ marginRight: '0.5rem' }} /> {isObserver ? '나가기' : '심사 종료'}
             </button>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '2.5rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isObserver ? '1fr' : '1.2fr 1fr', gap: '2.5rem' }}>
             {/* Input Section */}
             <section>
-              <div className="glass-card" style={{ padding: '2rem', marginBottom: '2rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem' }}>
-                  <UserPlus size={22} color="var(--primary)" />
-                  <h3 style={{ fontSize: '1.4rem' }}>새 참가자 등록</h3>
-                </div>
-                <form onSubmit={addCandidate} style={{ display: 'flex', gap: '1rem', flexDirection: 'column' }}>
-                  <div style={{ display: 'flex', gap: '1rem' }}>
-                    <input className="premium-input" style={{ flex: 1 }} placeholder="참가자 이름" value={newCandidateName} onChange={(e) => setNewCandidateName(e.target.value)} />
-                    <input className="premium-input" style={{ flex: 1 }} placeholder="곡명 (예: 밤양갱)" value={newSongTitle} onChange={(e) => setNewSongTitle(e.target.value)} />
+              {!isObserver && (
+                <div className="glass-card" style={{ padding: '2rem', marginBottom: '2rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem' }}>
+                    <UserPlus size={22} color="var(--primary)" />
+                    <h3 style={{ fontSize: '1.4rem' }}>새 참가자 등록</h3>
                   </div>
-                  <button type="submit" className="premium-button">참가자 등록</button>
-                </form>
-              </div>
+                  <form onSubmit={addCandidate} style={{ display: 'flex', gap: '1rem', flexDirection: 'column' }}>
+                    <div style={{ display: 'flex', gap: '1rem' }}>
+                      <input className="premium-input" style={{ flex: 1 }} placeholder="참가자 이름" value={newCandidateName} onChange={(e) => setNewCandidateName(e.target.value)} />
+                      <input className="premium-input" style={{ flex: 1 }} placeholder="곡명 (예: 밤양갱)" value={newSongTitle} onChange={(e) => setNewSongTitle(e.target.value)} />
+                    </div>
+                    <button type="submit" className="premium-button">참가자 등록</button>
+                  </form>
+                </div>
+              )}
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                 <h3 style={{ fontSize: '1.4rem', borderLeft: '4px solid var(--primary)', paddingLeft: '1rem' }}>
-                  {SIMPLE_JUDGES.includes(selectedJudge) ? '단순 합산 채점' : '항목별 세부 채점'}
+                  {isObserver ? '참가자 목록' : (SIMPLE_JUDGES.includes(selectedJudge) ? '단순 합산 채점' : '항목별 세부 채점')}
                 </h3>
                 {candidates.map(candidate => (
                   <div key={candidate.id} className="glass-card candidate-row" style={{ padding: '1.5rem' }}>
@@ -400,7 +405,7 @@ const App: React.FC = () => {
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
                         <span style={{ fontSize: '1.2rem', fontWeight: 600 }}>{candidate.name}</span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                          {editingSongId === candidate.id ? (
+                          {editingSongId === candidate.id && !isObserver ? (
                             <div style={{ display: 'flex', gap: '0.4rem' }}>
                               <input 
                                 className="premium-input" 
@@ -428,232 +433,128 @@ const App: React.FC = () => {
                               </button>
                             </div>
                           ) : (
-                            <>
-                              <span 
-                                style={{ fontSize: '0.85rem', color: 'var(--text-muted)', cursor: 'pointer' }}
-                                onClick={() => {
-                                  setEditingSongId(candidate.id);
-                                  setTempSongTitle(candidate.song || '');
-                                }}
-                              >
-                                🎵 {candidate.song || '곡명 미입력 (클릭하여 추가)'}
-                              </span>
-                            </>
+                            <span 
+                              style={{ 
+                                fontSize: '0.85rem', 
+                                color: 'var(--text-muted)', 
+                                cursor: isObserver ? 'default' : 'pointer' 
+                              }}
+                              onClick={() => {
+                                if (isObserver) return;
+                                setEditingSongId(candidate.id);
+                                setTempSongTitle(candidate.song || '');
+                              }}
+                            >
+                              🎵 {candidate.song || (isObserver ? '곡 정보 없음' : '곡명 미입력 (클릭하여 추가)')}
+                            </span>
                           )}
                         </div>
                       </div>
                       <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                         <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>현재 총점: <strong style={{ color: 'var(--primary)' }}>{getJudgeTotal(candidate, selectedJudge)}</strong>/100</span>
-                         <button onClick={() => deleteCandidate(candidate.id, candidate.name)} style={{ background: 'none', border: 'none', color: 'rgba(244, 63, 94, 0.6)', cursor: 'pointer' }}>
-                           <Trash2 size={18} />
-                         </button>
+                         <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+                           {isObserver ? '실시간 평균 점수: ' : '현재 총점: '}
+                           <strong style={{ color: 'var(--primary)' }}>
+                             {isObserver ? candidate.average : getJudgeTotal(candidate, selectedJudge)}
+                           </strong>/100
+                         </span>
+                         {!isObserver && (
+                           <button onClick={() => deleteCandidate(candidate.id, candidate.name)} style={{ background: 'none', border: 'none', color: 'rgba(244, 63, 94, 0.6)', cursor: 'pointer' }}>
+                             <Trash2 size={18} />
+                           </button>
+                         )}
                       </div>
                     </div>
-                    
-                    {SIMPLE_JUDGES.includes(selectedJudge) ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                          <label style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>총점 입력 (0~100):</label>
-                          <input 
-                            type="number"
-                            className="premium-input score-input"
-                            style={{ maxWidth: '120px', textAlign: 'center' }}
-                            placeholder="0"
-                            min="0"
-                            max="100"
-                            value={candidate.scores[selectedJudge]?.simpleTotal ?? ''}
-                            onChange={(e) => updateSimpleScore(candidate.id, e.target.value)}
-                          />
-                        </div>
-                        
-                        {/* Simple Mode Strike */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <button 
-                            onClick={() => updateItemStrikes(candidate.id, 'simple', 1)}
-                            style={{ 
-                              background: 'rgba(244, 63, 94, 0.1)', 
-                              border: '1px solid rgba(244, 63, 94, 0.2)', 
-                              color: '#f43f5e',
-                              borderRadius: '8px',
-                              padding: '4px 8px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            <X size={14} /> <span style={{ fontSize: '0.8rem', marginLeft: '2px' }}>X 추가</span>
-                          </button>
-                          <div style={{ display: 'flex', gap: '2px' }}>
-                            {Array.from({ length: candidate.scores[selectedJudge]?.itemStrikes?.['simple'] || 0 }).map((_, i) => (
-                              <X key={i} size={16} color="#f43f5e" strokeWidth={3} />
-                            ))}
+
+                    {/* Scoring Section */}
+                    {!isObserver && (
+                      SIMPLE_JUDGES.includes(selectedJudge) ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginTop: '1rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                            <label style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>총점 입력 (0~100):</label>
+                            <input 
+                              type="number"
+                              className="premium-input score-input"
+                              style={{ maxWidth: '120px', textAlign: 'center' }}
+                              placeholder="0"
+                              min="0"
+                              max="100"
+                              value={candidate.scores[selectedJudge]?.simpleTotal ?? ''}
+                              onChange={(e) => updateSimpleScore(candidate.id, e.target.value)}
+                            />
                           </div>
-                          {(candidate.scores[selectedJudge]?.itemStrikes?.['simple'] || 0) > 0 && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                             <button 
-                              onClick={() => updateItemStrikes(candidate.id, 'simple', -1)}
-                              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.7rem' }}
+                              onClick={() => updateItemStrikes(candidate.id, 'simple', 1)}
+                              style={{ background: 'rgba(244, 63, 94, 0.1)', border: '1px solid rgba(244, 63, 94, 0.2)', color: '#f43f5e', borderRadius: '8px', padding: '4px 8px', display: 'flex', alignItems: 'center', cursor: 'pointer' }}
                             >
-                              취소
+                              <X size={14} /> <span style={{ fontSize: '0.8rem', marginLeft: '2px' }}>X 추가</span>
                             </button>
-                          )}
+                            <div style={{ display: 'flex', gap: '2px' }}>
+                              {Array.from({ length: candidate.scores[selectedJudge]?.itemStrikes?.['simple'] || 0 }).map((_, i) => (
+                                <X key={i} size={16} color="#f43f5e" strokeWidth={3} />
+                              ))}
+                            </div>
+                            {(candidate.scores[selectedJudge]?.itemStrikes?.['simple'] || 0) > 0 && (
+                              <button 
+                                onClick={() => updateItemStrikes(candidate.id, 'simple', -1)}
+                                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.7rem' }}
+                              >
+                                취소
+                              </button>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ) : (
-                      <div className="scoring-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                        {EVALUATION_ITEMS.map(item => (
-                          <div key={item} style={{ 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            justifyContent: 'space-between',
-                            background: 'rgba(255, 255, 255, 0.02)',
-                            padding: '0.8rem',
-                            borderRadius: '12px',
-                            border: '1px solid rgba(255, 255, 255, 0.03)'
-                          }}>
-                            <label style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', flex: 1 }}>
-                              {item} ({JUDGE_SCORE_LIMITS[selectedJudge][item]})
-                            </label>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                              <input 
-                                type="number"
-                                className="premium-input score-input"
-                                style={{ width: '60px', padding: '6px', textAlign: 'center', fontSize: '0.9rem' }}
-                                placeholder="--"
-                                min="0"
-                                max={JUDGE_SCORE_LIMITS[selectedJudge][item]}
-                                value={candidate.scores[selectedJudge]?.[item] ?? ''}
-                                onChange={(e) => updateDetailScore(candidate.id, item, e.target.value)}
-                              />
-                              
-                              {/* Item Strike Button */}
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                                <button 
-                                  onClick={() => updateItemStrikes(candidate.id, item, 1)}
-                                  style={{ 
-                                    background: 'rgba(244, 63, 94, 0.15)', 
-                                    border: '1px solid rgba(244, 63, 94, 0.2)', 
-                                    color: '#f43f5e',
-                                    borderRadius: '6px',
-                                    width: '24px',
-                                    height: '24px',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    cursor: 'pointer'
-                                  }}
-                                  title="스트라이크 추가"
-                                >
-                                  <X size={14} strokeWidth={3} />
-                                </button>
-                                <div style={{ display: 'flex', gap: '1px' }}>
-                                  {Array.from({ length: candidate.scores[selectedJudge]?.itemStrikes?.[item] || 0 }).map((_, i) => (
-                                    <X key={i} size={14} color="#f43f5e" strokeWidth={3} />
-                                  ))}
+                      ) : (
+                        <div className="scoring-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '1rem' }}>
+                          {EVALUATION_ITEMS.map(item => (
+                            <div key={item} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255, 255, 255, 0.02)', padding: '0.8rem', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.03)' }}>
+                              <label style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', flex: 1 }}>{item} ({JUDGE_SCORE_LIMITS[selectedJudge][item]})</label>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                                <input type="number" className="premium-input score-input" style={{ width: '60px', padding: '6px', textAlign: 'center', fontSize: '0.9rem' }} min="0" max={JUDGE_SCORE_LIMITS[selectedJudge][item]} value={candidate.scores[selectedJudge]?.[item] ?? ''} onChange={(e) => updateDetailScore(candidate.id, item, e.target.value)} />
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                                  <button onClick={() => updateItemStrikes(candidate.id, item, 1)} style={{ background: 'rgba(244, 63, 94, 0.15)', border: '1px solid rgba(244, 63, 94, 0.2)', color: '#f43f5e', borderRadius: '6px', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={14} strokeWidth={3} /></button>
+                                  <div style={{ display: 'flex', gap: '1px' }}>{Array.from({ length: candidate.scores[selectedJudge]?.itemStrikes?.[item] || 0 }).map((_, i) => (<X key={i} size={14} color="#f43f5e" strokeWidth={3} />))}</div>
+                                  {(candidate.scores[selectedJudge]?.itemStrikes?.[item] || 0) > 0 && (<button onClick={() => updateItemStrikes(candidate.id, item, -1)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.65rem' }}>-</button>)}
                                 </div>
-                                {(candidate.scores[selectedJudge]?.itemStrikes?.[item] || 0) > 0 && (
-                                  <button 
-                                    onClick={() => updateItemStrikes(candidate.id, item, -1)}
-                                    style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.65rem', padding: '0 4px' }}
-                                  >
-                                    -
-                                  </button>
-                                )}
                               </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
+                          ))}
+                        </div>
+                      )
                     )}
-
 
                     {/* Comment Section with Toggle */}
                     <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                      <div 
-                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
-                        onClick={() => setExpandedComments(prev => ({ ...prev, [candidate.id]: !prev[candidate.id] }))}
-                      >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }} onClick={() => setExpandedComments(prev => ({ ...prev, [candidate.id]: !prev[candidate.id] }))}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                           <MessageSquare size={16} color="var(--text-muted)" />
-                          <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: 500 }}>
-                            심사 코멘트 ({candidate.comments?.length || 0})
-                          </span>
+                          <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: 500 }}>심사 코멘트 ({candidate.comments?.length || 0})</span>
                         </div>
-                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                          {expandedComments[candidate.id] ? '접기 ▲' : '펼치기 ▼'}
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}>
+                          {expandedComments[candidate.id] ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                         </span>
                       </div>
-                      
                       {expandedComments[candidate.id] && (
                         <div style={{ marginTop: '1rem' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', marginBottom: '1rem' }}>
-                            {candidate.comments && candidate.comments.length > 0 ? (
-                              candidate.comments.map((comment) => (
-                                <div key={comment.id} className="comment-item" style={{ 
-                                  background: 'rgba(255, 255, 255, 0.03)', 
-                                  padding: '0.8rem 1rem', 
-                                  borderRadius: '12px',
-                                  border: '1px solid rgba(255, 255, 255, 0.05)',
-                                  display: 'flex',
-                                  justifyContent: 'space-between',
-                                  alignItems: 'flex-start',
-                                  gap: '1rem'
-                                }}>
-                                  <div style={{ flex: 1 }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.2rem' }}>
-                                      <span style={{ 
-                                        fontSize: '0.75rem', 
-                                        fontWeight: 'bold', 
-                                        color: comment.author === '준모' ? '#6366f1' : (comment.author === '정현' ? '#fbbf24' : '#a855f7'),
-                                        background: 'rgba(255, 255, 255, 0.05)',
-                                        padding: '2px 6px',
-                                        borderRadius: '4px'
-                                      }}>
-                                        {comment.author}
-                                      </span>
-                                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                                        {new Date(comment.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                      </span>
-                                    </div>
-                                    <p style={{ fontSize: '0.9rem', lineHeight: '1.5', color: 'rgba(255, 255, 255, 0.9)' }}>{comment.content}</p>
+                            {candidate.comments && candidate.comments.length > 0 ? candidate.comments.map((comment) => (
+                              <div key={comment.id} style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '0.8rem 1rem', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.2rem' }}>
+                                    <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: comment.author === '준모' ? '#6366f1' : (comment.author === '정현' ? '#fbbf24' : '#a855f7'), background: 'rgba(255, 255, 255, 0.05)', padding: '2px 6px', borderRadius: '4px' }}>{comment.author}</span>
+                                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{new Date(comment.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                   </div>
-                                  {comment.author === selectedJudge && (
-                                    <button 
-                                      onClick={() => deleteComment(candidate.id, comment)}
-                                      style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px' }}
-                                    >
-                                      <X size={14} />
-                                    </button>
-                                  )}
+                                  <p style={{ fontSize: '0.9rem', lineHeight: '1.5', color: 'rgba(255, 255, 255, 0.9)' }}>{comment.content}</p>
                                 </div>
-                              ))
-                            ) : (
-                              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center', padding: '1rem', border: '1px dashed rgba(255, 255, 255, 0.05)', borderRadius: '12px' }}>
-                                아직 작성된 코멘트가 없습니다.
-                              </p>
-                            )}
+                                {comment.author === selectedJudge && (
+                                  <button onClick={() => deleteComment(candidate.id, comment)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px' }}><X size={14} /></button>
+                                )}
+                              </div>
+                            )) : <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center', padding: '1rem', border: '1px dashed rgba(255, 255, 255, 0.05)', borderRadius: '12px' }}>아직 작성된 코멘트가 없습니다.</p>}
                           </div>
-
                           <div style={{ display: 'flex', gap: '0.6rem' }}>
-                            <input 
-                              className="premium-input" 
-                              style={{ flex: 1, padding: '0.6rem 1rem', fontSize: '0.9rem' }} 
-                              placeholder="질문이나 피드백을 남겨주세요..." 
-                              value={commentInputs[candidate.id] || ''} 
-                              onChange={(e) => setCommentInputs(prev => ({ ...prev, [candidate.id]: e.target.value }))}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
-                                  addComment(candidate.id);
-                                }
-                              }}
-                            />
-                            <button 
-                              className="premium-button" 
-                              style={{ padding: '0.6rem', borderRadius: '10px' }}
-                              onClick={() => addComment(candidate.id)}
-                              disabled={!commentInputs[candidate.id]?.trim()}
-                            >
-                              <Send size={18} />
-                            </button>
+                            <input className="premium-input" style={{ flex: 1, padding: '0.6rem 1rem', fontSize: '0.9rem' }} placeholder="질문이나 피드백을 남겨주세요..." value={commentInputs[candidate.id] || ''} onChange={(e) => setCommentInputs(prev => ({ ...prev, [candidate.id]: e.target.value }))} onKeyDown={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && addComment(candidate.id)} />
+                            <button className="premium-button" style={{ padding: '0.6rem', borderRadius: '10px' }} onClick={() => addComment(candidate.id)} disabled={!commentInputs[candidate.id]?.trim()}><Send size={18} /></button>
                           </div>
                         </div>
                       )}

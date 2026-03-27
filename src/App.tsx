@@ -435,6 +435,18 @@ const App: React.FC = () => {
           </div>
         </div>
       )}
+    <footer style={{ 
+      marginTop: '4rem', 
+      padding: '2rem 0', 
+      borderTop: '1px solid rgba(255,255,255,0.05)',
+      textAlign: 'center',
+      color: 'rgba(255,255,255,0.3)',
+      fontSize: '0.9rem',
+      letterSpacing: '1px'
+    }}>
+      <p>Developed by <strong>Kim Junmo</strong></p>
+      <p style={{ fontSize: '0.75rem', marginTop: '0.5rem', opacity: 0.5 }}>© 2024 Audition Master. All rights reserved.</p>
+    </footer>
     </div>
   );
 };

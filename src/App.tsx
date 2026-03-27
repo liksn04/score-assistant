@@ -33,6 +33,8 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
   const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({});
+  const [editingSongId, setEditingSongId] = useState<string | null>(null);
+  const [tempSongTitle, setTempSongTitle] = useState('');
 
   // 실시간 순위 데이터 (순위표 전용)
   const sortedCandidates = React.useMemo(() => {
@@ -77,9 +79,10 @@ const App: React.FC = () => {
     try {
       const initialScores: any = {};
       JUDGES.forEach(j => {
-        initialScores[j] = { strikes: 0 };
+        initialScores[j] = { strikes: 0, itemStrikes: {} };
         EVALUATION_ITEMS.forEach(item => {
           initialScores[j][item] = null;
+          initialScores[j].itemStrikes[item] = 0;
         });
       });
 
@@ -275,35 +278,44 @@ const App: React.FC = () => {
     }
   };
 
-  const updateStrikes = async (candidateId: string, increment: number) => {
+  const updateItemStrikes = async (candidateId: string, item: string, increment: number) => {
     if (!selectedJudge) return;
 
     const candidate = candidates.find(c => c.id === candidateId);
     if (!candidate) return;
 
     try {
-      const currentStrikes = candidate.scores[selectedJudge]?.strikes || 0;
-      const newStrikes = Math.max(0, currentStrikes + increment);
+      const currentItemStrikes = candidate.scores[selectedJudge]?.itemStrikes || {};
+      const currentVal = currentItemStrikes[item] || 0;
+      const newVal = Math.max(0, currentVal + increment);
 
       const newScores = {
         ...candidate.scores,
         [selectedJudge]: {
           ...candidate.scores[selectedJudge],
-          strikes: newStrikes
+          itemStrikes: {
+            ...currentItemStrikes,
+            [item]: newVal
+          }
         }
       };
 
       await updateDoc(doc(db, 'candidates', candidateId), {
-        scores: newScores,
-        updatedAt: serverTimestamp() // 리스트 위치 고정을 위해 updatedAt을 업데이트할지 고민... 
-        // 유저가 등록 순 고정을 원했으니 updatedAt을 업데이트하면 위치가 바뀔 수 있음.
-        // 하지만 fixedData sort logic에서 updatedAt을 쓰기로 했으므로,
-        // 등록 시점의 시간을 고정값으로 갖는 별도의 필드(createdAt)를 쓰는게 더 정확함.
-        // 일단은 updatedAt으로 가되, addCandidate에서 serverTimestamp()를 찍고
-        // 이 후 업데이트에서는 updatedAt을 건드리지 않거나, createdAt 필드를 새로 도입하겠음.
+        scores: newScores
       });
     } catch (error) {
-      console.error("스트라이크 업데이트 오류:", error);
+      console.error("항목별 스트라이크 업데이트 오류:", error);
+    }
+  };
+
+  const updateSongTitle = async (candidateId: string, newTitle: string) => {
+    try {
+      await updateDoc(doc(db, 'candidates', candidateId), {
+        song: newTitle,
+        updatedAt: serverTimestamp()
+      });
+    } catch (error) {
+      console.error("곡명 업데이트 오류:", error);
     }
   };
 
@@ -387,7 +399,48 @@ const App: React.FC = () => {
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem', alignItems: 'center' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
                         <span style={{ fontSize: '1.2rem', fontWeight: 600 }}>{candidate.name}</span>
-                        {candidate.song && <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>🎵 {candidate.song}</span>}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                          {editingSongId === candidate.id ? (
+                            <div style={{ display: 'flex', gap: '0.4rem' }}>
+                              <input 
+                                className="premium-input" 
+                                style={{ padding: '2px 8px', fontSize: '0.8rem', width: '150px' }}
+                                value={tempSongTitle}
+                                onChange={(e) => setTempSongTitle(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    updateSongTitle(candidate.id, tempSongTitle);
+                                    setEditingSongId(null);
+                                  } else if (e.key === 'Escape') {
+                                    setEditingSongId(null);
+                                  }
+                                }}
+                                autoFocus
+                              />
+                              <button 
+                                onClick={() => {
+                                  updateSongTitle(candidate.id, tempSongTitle);
+                                  setEditingSongId(null);
+                                }}
+                                style={{ background: 'var(--primary)', border: 'none', color: 'white', borderRadius: '4px', padding: '2px 6px', fontSize: '0.7rem', cursor: 'pointer' }}
+                              >
+                                저장
+                              </button>
+                            </div>
+                          ) : (
+                            <>
+                              <span 
+                                style={{ fontSize: '0.85rem', color: 'var(--text-muted)', cursor: 'pointer' }}
+                                onClick={() => {
+                                  setEditingSongId(candidate.id);
+                                  setTempSongTitle(candidate.song || '');
+                                }}
+                              >
+                                🎵 {candidate.song || '곡명 미입력 (클릭하여 추가)'}
+                              </span>
+                            </>
+                          )}
+                        </div>
                       </div>
                       <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                          <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>현재 총점: <strong style={{ color: 'var(--primary)' }}>{getJudgeTotal(candidate, selectedJudge)}</strong>/100</span>
@@ -398,70 +451,120 @@ const App: React.FC = () => {
                     </div>
                     
                     {SIMPLE_JUDGES.includes(selectedJudge) ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                        <label style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>총점 입력 (0~100):</label>
-                        <input 
-                          type="number"
-                          className="premium-input score-input"
-                          style={{ maxWidth: '120px', textAlign: 'center' }}
-                          placeholder="0"
-                          min="0"
-                          max="100"
-                          value={candidate.scores[selectedJudge]?.simpleTotal ?? ''}
-                          onChange={(e) => updateSimpleScore(candidate.id, e.target.value)}
-                        />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                          <label style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>총점 입력 (0~100):</label>
+                          <input 
+                            type="number"
+                            className="premium-input score-input"
+                            style={{ maxWidth: '120px', textAlign: 'center' }}
+                            placeholder="0"
+                            min="0"
+                            max="100"
+                            value={candidate.scores[selectedJudge]?.simpleTotal ?? ''}
+                            onChange={(e) => updateSimpleScore(candidate.id, e.target.value)}
+                          />
+                        </div>
+                        
+                        {/* Simple Mode Strike */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <button 
+                            onClick={() => updateItemStrikes(candidate.id, 'simple', 1)}
+                            style={{ 
+                              background: 'rgba(244, 63, 94, 0.1)', 
+                              border: '1px solid rgba(244, 63, 94, 0.2)', 
+                              color: '#f43f5e',
+                              borderRadius: '8px',
+                              padding: '4px 8px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <X size={14} /> <span style={{ fontSize: '0.8rem', marginLeft: '2px' }}>X 추가</span>
+                          </button>
+                          <div style={{ display: 'flex', gap: '2px' }}>
+                            {Array.from({ length: candidate.scores[selectedJudge]?.itemStrikes?.['simple'] || 0 }).map((_, i) => (
+                              <X key={i} size={16} color="#f43f5e" strokeWidth={3} />
+                            ))}
+                          </div>
+                          {(candidate.scores[selectedJudge]?.itemStrikes?.['simple'] || 0) > 0 && (
+                            <button 
+                              onClick={() => updateItemStrikes(candidate.id, 'simple', -1)}
+                              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.7rem' }}
+                            >
+                              취소
+                            </button>
+                          )}
+                        </div>
                       </div>
                     ) : (
-                      <div className="scoring-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.8rem' }}>
+                      <div className="scoring-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                         {EVALUATION_ITEMS.map(item => (
-                          <div key={item} style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                            <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-                              {item} ({JUDGE_SCORE_LIMITS[selectedJudge][item]}점)
+                          <div key={item} style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'space-between',
+                            background: 'rgba(255, 255, 255, 0.02)',
+                            padding: '0.8rem',
+                            borderRadius: '12px',
+                            border: '1px solid rgba(255, 255, 255, 0.03)'
+                          }}>
+                            <label style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', flex: 1 }}>
+                              {item} ({JUDGE_SCORE_LIMITS[selectedJudge][item]})
                             </label>
-                            <input 
-                              type="number"
-                              className="premium-input score-input"
-                              style={{ padding: '8px', textAlign: 'center' }}
-                              placeholder="0"
-                              min="0"
-                              max={JUDGE_SCORE_LIMITS[selectedJudge][item]}
-                              value={candidate.scores[selectedJudge]?.[item] ?? ''}
-                              onChange={(e) => updateDetailScore(candidate.id, item, e.target.value)}
-                            />
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                              <input 
+                                type="number"
+                                className="premium-input score-input"
+                                style={{ width: '60px', padding: '6px', textAlign: 'center', fontSize: '0.9rem' }}
+                                placeholder="--"
+                                min="0"
+                                max={JUDGE_SCORE_LIMITS[selectedJudge][item]}
+                                value={candidate.scores[selectedJudge]?.[item] ?? ''}
+                                onChange={(e) => updateDetailScore(candidate.id, item, e.target.value)}
+                              />
+                              
+                              {/* Item Strike Button */}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                                <button 
+                                  onClick={() => updateItemStrikes(candidate.id, item, 1)}
+                                  style={{ 
+                                    background: 'rgba(244, 63, 94, 0.15)', 
+                                    border: '1px solid rgba(244, 63, 94, 0.2)', 
+                                    color: '#f43f5e',
+                                    borderRadius: '6px',
+                                    width: '24px',
+                                    height: '24px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    cursor: 'pointer'
+                                  }}
+                                  title="스트라이크 추가"
+                                >
+                                  <X size={14} strokeWidth={3} />
+                                </button>
+                                <div style={{ display: 'flex', gap: '1px' }}>
+                                  {Array.from({ length: candidate.scores[selectedJudge]?.itemStrikes?.[item] || 0 }).map((_, i) => (
+                                    <X key={i} size={14} color="#f43f5e" strokeWidth={3} />
+                                  ))}
+                                </div>
+                                {(candidate.scores[selectedJudge]?.itemStrikes?.[item] || 0) > 0 && (
+                                  <button 
+                                    onClick={() => updateItemStrikes(candidate.id, item, -1)}
+                                    style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.65rem', padding: '0 4px' }}
+                                  >
+                                    -
+                                  </button>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         ))}
                       </div>
                     )}
 
-                    {/* Strikes Section */}
-                    <div style={{ marginTop: '1.5rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                      <button 
-                        className="premium-button strike-btn" 
-                        style={{ 
-                          background: 'rgba(244, 63, 94, 0.1)', 
-                          color: '#f43f5e', 
-                          border: '1px solid rgba(244, 63, 94, 0.2)',
-                          padding: '0.5rem 1rem',
-                          fontSize: '0.9rem'
-                        }}
-                        onClick={() => updateStrikes(candidate.id, 1)}
-                      >
-                        <X size={16} style={{ marginRight: '0.4rem' }} /> 스트라이크 추가
-                      </button>
-                      <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-                        {Array.from({ length: candidate.scores[selectedJudge]?.strikes || 0 }).map((_, i) => (
-                          <X key={i} size={20} color="#f43f5e" strokeWidth={3} />
-                        ))}
-                        {(candidate.scores[selectedJudge]?.strikes || 0) > 0 && (
-                          <button 
-                            onClick={() => updateStrikes(candidate.id, -1)}
-                            style={{ marginLeft: '0.5rem', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.8rem' }}
-                          >
-                            취소
-                          </button>
-                        )}
-                      </div>
-                    </div>
 
                     {/* Comment Section with Toggle */}
                     <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>

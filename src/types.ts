@@ -7,7 +7,8 @@ export type EvaluationItem = typeof EVALUATION_ITEMS[number];
 // To maintain compatibility, we'll store the simple score in a field named 'total'
 export type EvaluationScores = Record<EvaluationItem, number | null> & {
   simpleTotal?: number | null;
-  strikes?: number;
+  strikes?: number; // 전체 스트라이크 (하위 호환성 유지)
+  itemStrikes?: Record<string, number>; // 항목별 스트라이크
 };
 
 // 단순 채점 방식을 사용하는 심사위원 명단

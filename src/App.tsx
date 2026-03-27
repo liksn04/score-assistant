@@ -56,12 +56,13 @@ const App: React.FC = () => {
         ...doc.data()
       })) as Candidate[];
       
-      // 입력창 고정을 위해 등록 순으로 정렬 (updatedAt 기준 오름차순)
-      // 또는 id 기준 등으로 고정 가능. 여기서는 updatedAt 기준.
+      // 입력창 고정을 위해 등록 순으로 정렬 (createdAt 기준 오름차순)
+      // createdAt이 없는 기존 데이터는 id나 updatedAt으로 대체
       const fixedData = [...data].sort((a, b) => {
-        const timeA = a.updatedAt?.seconds || 0;
-        const timeB = b.updatedAt?.seconds || 0;
-        return timeA - timeB;
+        const timeA = a.createdAt?.seconds || a.updatedAt?.seconds || 0;
+        const timeB = b.createdAt?.seconds || b.updatedAt?.seconds || 0;
+        if (timeA !== timeB) return timeA - timeB;
+        return a.id.localeCompare(b.id);
       });
       
       setCandidates(fixedData);
@@ -95,6 +96,7 @@ const App: React.FC = () => {
         scores: initialScores,
         total: 0,
         average: 0,
+        createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
       setNewCandidateName('');

@@ -38,6 +38,7 @@ export interface Candidate {
   comments?: Comment[]; // 선택적 필드로 추가 (기존 데이터 호환성)
   total: number;
   average: number;
+  createdAt?: any;
   updatedAt: any;
 }
 

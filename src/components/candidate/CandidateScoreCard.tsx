@@ -53,15 +53,15 @@ const CandidateScoreCard: React.FC<CandidateScoreCardProps> = ({
 
   return (
     <div className="glass-card candidate-row" style={{ padding: '1.5rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem', alignItems: 'center' }}>
+      <div className="candidate-row-header">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
           <span style={{ fontSize: '1.2rem', fontWeight: 600 }}>{candidate.name}</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
             {editingSongId === candidate.id && !isObserver ? (
-              <div style={{ display: 'flex', gap: '0.4rem' }}>
+              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
                 <input 
                   className="premium-input" 
-                  style={{ padding: '2px 8px', fontSize: '0.8rem', width: '150px' }}
+                  style={{ padding: '2px 8px', fontSize: '0.8rem', width: '120px' }}
                   value={tempSongTitle}
                   onChange={(e) => setTempSongTitle(e.target.value)}
                   onKeyDown={(e) => {
@@ -89,7 +89,8 @@ const CandidateScoreCard: React.FC<CandidateScoreCardProps> = ({
                 style={{ 
                   fontSize: '0.85rem', 
                   color: 'var(--text-muted)', 
-                  cursor: isObserver ? 'default' : 'pointer' 
+                  cursor: isObserver ? 'default' : 'pointer',
+                  wordBreak: 'break-all'
                 }}
                 onClick={() => {
                   if (isObserver) return;
@@ -97,15 +98,15 @@ const CandidateScoreCard: React.FC<CandidateScoreCardProps> = ({
                   setTempSongTitle(candidate.song || '');
                 }}
               >
-                🎵 {candidate.song || (isObserver ? '곡 정보 없음' : '곡명 미입력 (클릭하여 추가)')}
+                🎵 {candidate.song || (isObserver ? '곡 정보 없음' : '곡명 미입력')}
               </span>
             )}
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+        <div className="score-info-group">
           <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
-            {isObserver ? '실시간 평균 점수: ' : '현재 총점: '}
-            <strong style={{ color: 'var(--primary)' }}>
+            {isObserver ? '평균: ' : '총점: '}
+            <strong style={{ color: 'var(--primary)', fontSize: '1.1rem' }}>
               {isObserver ? candidate.average : getJudgeTotal(candidate, selectedJudge)}
             </strong>/100
           </span>
@@ -115,19 +116,20 @@ const CandidateScoreCard: React.FC<CandidateScoreCardProps> = ({
                 onClick={() => onToggleCompletion(candidate.id, isCompleted)} 
                 className={`premium-button ${isCompleted ? 'completed-btn' : 'complete-btn'}`}
                 style={{ 
-                  padding: '4px 12px', 
-                  fontSize: '0.8rem', 
+                  padding: '4px 10px', 
+                  fontSize: '0.75rem', 
                   display: 'flex', 
                   alignItems: 'center', 
                   gap: '0.3rem',
                   background: isCompleted ? 'rgba(34, 197, 94, 0.1)' : 'rgba(34, 197, 94, 0.2)',
                   color: '#22c55e',
                   border: `1px solid ${isCompleted ? 'rgba(34, 197, 94, 0.2)' : '#22c55e'}`,
-                  borderRadius: '20px'
+                  borderRadius: '20px',
+                  whiteSpace: 'nowrap'
                 }}
               >
-                {isCompleted ? <RotateCcw size={14} /> : <CheckCircle2 size={14} />}
-                {isCompleted ? '심사 취소' : '심사 완료'}
+                {isCompleted ? <RotateCcw size={12} /> : <CheckCircle2 size={12} />}
+                {isCompleted ? '취소' : '완료'}
               </button>
               <button onClick={() => deleteCandidate(candidate.id, candidate.name)} style={{ background: 'none', border: 'none', color: 'rgba(244, 63, 94, 0.6)', cursor: 'pointer', padding: '0 4px' }}>
                 <Trash2 size={18} />

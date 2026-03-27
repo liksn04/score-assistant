@@ -149,18 +149,132 @@ body {
   background: var(--text-muted);
 }
 
-/* Responsive Table */
+/* --- Responsive Design System --- */
+
+.candidate-row-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+  align-items: center;
+}
+
+.score-info-group {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.leaderboard-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 @media (max-width: 1024px) {
-  .dashboard > div {
+  .dashboard-content {
     grid-template-columns: 1fr !important;
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 768px) {
+  .container {
+    padding: 1rem;
+  }
+
+  h1 {
+    font-size: 2.2rem !important;
+  }
+
+  .glass-card {
+    padding: 1.2rem !important;
+    border-radius: 16px;
+  }
+
+  /* Judge Selection Grid */
+  .judge-selection {
+    grid-template-columns: 1fr !important;
+    gap: 1rem !important;
+  }
+
+  .judge-card {
+    padding: 1.5rem !important;
+  }
+
+  .judge-icon-wrapper {
+    width: 60px !important;
+    height: 60px !important;
+    margin-bottom: 1rem !important;
+  }
+
+  .judge-card h3 {
+    font-size: 1.4rem !important;
+  }
+
+  /* Dashboard Adjustments */
+  .dashboard-header {
+    flex-direction: column;
+    align-items: flex-start !important;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem !important;
+  }
+
+  .logout-btn {
+    width: 100%;
+  }
+
+  /* Candidate Card Stacking */
+  .candidate-row-header {
+    flex-direction: column;
+    align-items: flex-start !important;
+    gap: 1rem;
+  }
+
+  .score-info-group {
+    width: 100%;
+    justify-content: space-between;
+    padding-top: 1rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  /* Form & Grid Layouts */
+  form div {
+    flex-direction: column;
+  }
+
+  .premium-input {
+    width: 100% !important;
+  }
+
   .scoring-grid {
-    grid-template-columns: repeat(2, 1fr) !important;
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Leaderboard Column Management */
+  .leaderboard-table th:nth-child(4),
+  .leaderboard-table td:nth-child(4) {
+    display: none; 
   }
 }
+
+@media (max-width: 480px) {
+  h1 {
+    font-size: 1.8rem !important;
+  }
+
+  .premium-button {
+    padding: 0.6rem 1rem;
+    font-size: 0.9rem;
+  }
+
+  .leaderboard-table {
+    font-size: 0.8rem;
+  }
+
+  .leaderboard-table th, .leaderboard-table td {
+    padding: 0.8rem 0.4rem !important;
+  }
+}
+
 .comment-item {
   transition: all 0.2s ease;
 }

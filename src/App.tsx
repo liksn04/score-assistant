@@ -268,18 +268,19 @@ const App: React.FC = () => {
         </div>
       ) : (
         <div className="dashboard fade-in">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem' }}>
+          <div className="dashboard-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                <Star color="#fbbf24" fill="#fbbf24" />
-                <h2 style={{ fontSize: '1.8rem' }}>
-                  {isObserver ? '참관자 모니터링 대시보드' : `${currentJudge} 심사위원 대시보드`}
+                <Star size={24} color="#fbbf24" fill="#fbbf24" />
+                <h2 style={{ fontSize: 'calc(1.4rem + 0.5vw)' }}>
+                  {isObserver ? '참관자 모니터링' : `${currentJudge} 심사위원`}
                 </h2>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', marginLeft: '2.5rem' }}>
-                <p style={{ color: 'var(--text-muted)' }}>현재 오디션: <strong>{activeAudition?.name}</strong></p>
-                <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)' }} />
-                <p style={{ color: 'var(--text-muted)' }}>보안 세션 활성화됨</p>
+              <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginLeft: '0.2rem' }}>
+                <span className="glass-card" style={{ padding: '0.2rem 0.6rem', fontSize: '0.8rem', background: 'rgba(255,255,255,0.05)' }}>
+                  {activeAudition?.name}
+                </span>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>보안 세션 활성화</span>
               </div>
             </div>
             <button 
@@ -296,9 +297,9 @@ const App: React.FC = () => {
             </button>
           </div>
 
-          <div style={{ 
+          <div className="dashboard-content" style={{ 
             display: 'grid', 
-            gridTemplateColumns: isObserver ? '1fr' : '1.2fr 1.0fr', 
+            gridTemplateColumns: isObserver ? '1fr' : 'repeat(auto-fit, minmax(350px, 1fr))', 
             gap: '2.5rem',
             alignItems: 'start'
           }}>

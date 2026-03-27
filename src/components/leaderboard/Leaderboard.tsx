@@ -14,8 +14,8 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ sortedCandidates }) => {
         <h3 style={{ fontSize: '1.4rem' }}>실시간 순위 현황</h3>
       </div>
       
-      <div className="leaderboard-table" style={{ width: '100%' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <div className="leaderboard-wrapper">
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '400px' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
               <th style={{ padding: '1rem 0.5rem', textAlign: 'left' }}>순위</th>

@@ -7,6 +7,7 @@ export type EvaluationItem = typeof EVALUATION_ITEMS[number];
 // To maintain compatibility, we'll store the simple score in a field named 'total'
 export type EvaluationScores = Record<EvaluationItem, number | null> & {
   simpleTotal?: number | null;
+  strikes?: number;
 };
 
 // 단순 채점 방식을 사용하는 심사위원 명단
@@ -29,6 +30,7 @@ export interface Comment {
 export interface Candidate {
   id: string;
   name: string;
+  song?: string;
   // 심사위원별 점수 저장
   scores: Record<JudgeName, EvaluationScores>;
   comments?: Comment[]; // 선택적 필드로 추가 (기존 데이터 호환성)

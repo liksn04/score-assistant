@@ -18,14 +18,19 @@ import {
   UserPlus, 
   Trash2, 
   LogOut,
-  Star
+  Star,
+  MessageSquare,
+  Send,
+  X
 } from 'lucide-react';
+import { arrayUnion, arrayRemove } from 'firebase/firestore';
 
 const App: React.FC = () => {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [selectedJudge, setSelectedJudge] = useState<JudgeName | null>(null);
   const [newCandidateName, setNewCandidateName] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
 
   // 실시간 데이터 수신
   useEffect(() => {
@@ -222,6 +227,40 @@ const App: React.FC = () => {
     }
   };
 
+  const addComment = async (candidateId: string) => {
+    if (!selectedJudge || !commentInputs[candidateId]?.trim()) return;
+
+    try {
+      const newComment = {
+        id: Math.random().toString(36).substr(2, 9),
+        author: selectedJudge,
+        content: commentInputs[candidateId].trim(),
+        createdAt: new Date().toISOString(), // serverTimestamp() inside arrayUnion is not supported directly in some cases, using ISO string for simplicity or handling it differently
+      };
+
+      await updateDoc(doc(db, 'candidates', candidateId), {
+        comments: arrayUnion(newComment)
+      });
+
+      setCommentInputs(prev => ({ ...prev, [candidateId]: '' }));
+    } catch (error) {
+      console.error("코멘트 추가 오류:", error);
+      alert("코멘트 추가 중 오류가 발생했습니다.");
+    }
+  };
+
+  const deleteComment = async (candidateId: string, comment: any) => {
+    if (!window.confirm("이 코멘트를 삭제하시겠습니까?")) return;
+
+    try {
+      await updateDoc(doc(db, 'candidates', candidateId), {
+        comments: arrayRemove(comment)
+      });
+    } catch (error) {
+      console.error("코멘트 삭제 오류:", error);
+    }
+  };
+
   const deleteCandidate = async (id: string, name: string) => {
     if (window.confirm(`${name} 참가자를 삭제하시겠습니까?`)) {
       await deleteDoc(doc(db, 'candidates', id));
@@ -341,6 +380,85 @@ const App: React.FC = () => {
                         ))}
                       </div>
                     )}
+
+                    {/* Comment Section */}
+                    <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+                        <MessageSquare size={16} color="var(--text-muted)" />
+                        <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: 500 }}>심사 코멘트</span>
+                      </div>
+                      
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', marginBottom: '1rem' }}>
+                        {candidate.comments && candidate.comments.length > 0 ? (
+                          candidate.comments.map((comment) => (
+                            <div key={comment.id} className="comment-item" style={{ 
+                              background: 'rgba(255, 255, 255, 0.03)', 
+                              padding: '0.8rem 1rem', 
+                              borderRadius: '12px',
+                              border: '1px solid rgba(255, 255, 255, 0.05)',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'flex-start',
+                              gap: '1rem'
+                            }}>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.2rem' }}>
+                                  <span style={{ 
+                                    fontSize: '0.75rem', 
+                                    fontWeight: 'bold', 
+                                    color: comment.author === '준모' ? '#6366f1' : (comment.author === '정현' ? '#fbbf24' : '#a855f7'),
+                                    background: 'rgba(255, 255, 255, 0.05)',
+                                    padding: '2px 6px',
+                                    borderRadius: '4px'
+                                  }}>
+                                    {comment.author}
+                                  </span>
+                                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                                    {new Date(comment.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                </div>
+                                <p style={{ fontSize: '0.9rem', lineHeight: '1.5', color: 'rgba(255, 255, 255, 0.9)' }}>{comment.content}</p>
+                              </div>
+                              {comment.author === selectedJudge && (
+                                <button 
+                                  onClick={() => deleteComment(candidate.id, comment)}
+                                  style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px' }}
+                                >
+                                  <X size={14} />
+                                </button>
+                              )}
+                            </div>
+                          ))
+                        ) : (
+                          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center', padding: '1rem', border: '1px dashed rgba(255, 255, 255, 0.05)', borderRadius: '12px' }}>
+                            아직 작성된 코멘트가 없습니다.
+                          </p>
+                        )}
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '0.6rem' }}>
+                        <input 
+                          className="premium-input" 
+                          style={{ flex: 1, padding: '0.6rem 1rem', fontSize: '0.9rem' }} 
+                          placeholder="질문이나 피드백을 남겨주세요..." 
+                          value={commentInputs[candidate.id] || ''} 
+                          onChange={(e) => setCommentInputs(prev => ({ ...prev, [candidate.id]: e.target.value }))}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                              addComment(candidate.id);
+                            }
+                          }}
+                        />
+                        <button 
+                          className="premium-button" 
+                          style={{ padding: '0.6rem', borderRadius: '10px' }}
+                          onClick={() => addComment(candidate.id)}
+                          disabled={!commentInputs[candidate.id]?.trim()}
+                        >
+                          <Send size={18} />
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>

@@ -19,11 +19,19 @@ export const JUDGE_SCORE_LIMITS: Record<JudgeName, Record<EvaluationItem, number
   "진하": { "박자": 30, "음정": 30, "가사": 10, "긴장": 15, "즐김": 15 }
 };
 
+export interface Comment {
+  id: string;
+  author: JudgeName;
+  content: string;
+  createdAt: any;
+}
+
 export interface Candidate {
   id: string;
   name: string;
   // 심사위원별 점수 저장
   scores: Record<JudgeName, EvaluationScores>;
+  comments?: Comment[]; // 선택적 필드로 추가 (기존 데이터 호환성)
   total: number;
   average: number;
   updatedAt: any;

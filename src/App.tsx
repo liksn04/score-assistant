@@ -283,10 +283,53 @@ const App: React.FC = () => {
 
     try {
       await updateDoc(doc(db, 'candidates', candidateId), {
-        comments: arrayRemove(comment)
+        comments: arrayRemove(comment),
+        updatedAt: serverTimestamp()
       });
     } catch (error) {
       console.error("코멘트 삭제 오류:", error);
+    }
+  };
+
+  const handleRecordingUpload = async (candidateId: string, file: File) => {
+    if (isObserver) return;
+    setUploadingId(candidateId);
+    
+    try {
+      const storageRef = ref(storage, `recordings/${candidateId}/${Date.now()}_${file.name}`);
+      await uploadBytes(storageRef, file);
+      const downloadURL = await getDownloadURL(storageRef);
+      
+      const newRecording: Recording = {
+        name: file.name,
+        url: downloadURL,
+        createdAt: new Date().toISOString()
+      };
+      
+      await updateDoc(doc(db, 'candidates', candidateId), {
+        recordings: arrayUnion(newRecording),
+        updatedAt: serverTimestamp()
+      });
+    } catch (error) {
+      console.error("녹음 파일 업로드 오류:", error);
+      alert("파일 업로드 중 오류가 발생했습니다.");
+    } finally {
+      setUploadingId(null);
+    }
+  };
+
+  const deleteRecording = async (candidateId: string, recording: Recording) => {
+    if (isObserver) return;
+    if (!confirm("정말 이 녹음 파일을 삭제하시겠습니까?")) return;
+    
+    try {
+      await updateDoc(doc(db, 'candidates', candidateId), {
+        recordings: arrayRemove(recording),
+        updatedAt: serverTimestamp()
+      });
+    } catch (error) {
+      console.error("녹음 파일 삭제 오류:", error);
+      alert("파일 삭제 중 오류가 발생했습니다.");
     }
   };
 

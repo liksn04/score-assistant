@@ -11,7 +11,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebaseConfig';
 import type { Candidate, JudgeName, EvaluationItem } from './types';
-import { JUDGES, EVALUATION_ITEMS, JUDGE_SCORE_LIMITS } from './types';
+import { JUDGES, EVALUATION_ITEMS, JUDGE_SCORE_LIMITS, SIMPLE_JUDGES } from './types';
 import { 
   Users, 
   Trophy, 
@@ -79,6 +79,74 @@ const App: React.FC = () => {
     }
   };
 
+  // 단순 점수 업데이트 로직 (전체 100점 방식)
+  const updateSimpleScore = async (candidateId: string, scoreStr: string) => {
+    if (!selectedJudge) return;
+
+    let score: number | null = scoreStr.trim() === "" ? null : parseInt(scoreStr);
+
+    if (score !== null && (isNaN(score) || score < 0 || score > 100)) {
+       alert("0에서 100 사이의 숫자를 입력해주세요.");
+       return;
+    }
+
+    const candidate = candidates.find(c => c.id === candidateId);
+    if (!candidate) return;
+
+    try {
+      const newScores = {
+        ...candidate.scores,
+        [selectedJudge]: { 
+          ...candidate.scores[selectedJudge], 
+          simpleTotal: score 
+        }
+      };
+
+      // 전체 통계 재계산
+      let overallTotal = 0;
+      let judgeCount = 0;
+
+      JUDGES.forEach(j => {
+        const jScores = newScores[j];
+        if (!jScores) return;
+
+        let jTotal = 0;
+        let hasScore = false;
+
+        if (SIMPLE_JUDGES.includes(j)) {
+          // 단순 채점 모드
+          if (jScores.simpleTotal !== null && jScores.simpleTotal !== undefined) {
+             jTotal = jScores.simpleTotal;
+             hasScore = true;
+          }
+        } else {
+          // 세부 채점 모드
+          const validValues = EVALUATION_ITEMS.map(item => jScores[item]).filter((v): v is number => v !== null);
+          if (validValues.length > 0) {
+             jTotal = validValues.reduce((a, b) => a + b, 0);
+             hasScore = true;
+          }
+        }
+
+        if (hasScore) {
+          overallTotal += jTotal;
+          judgeCount++;
+        }
+      });
+
+      const average = judgeCount > 0 ? Number((overallTotal / judgeCount).toFixed(2)) : 0;
+
+      await updateDoc(doc(db, 'candidates', candidateId), {
+        scores: newScores,
+        total: overallTotal,
+        average: average,
+        updatedAt: serverTimestamp()
+      });
+    } catch (error) {
+      console.error("단순 점수 업데이트 오류:", error);
+    }
+  };
+
   // 세부 점수 업데이트 로직
   const updateDetailScore = async (candidateId: string, item: EvaluationItem, scoreStr: string) => {
     if (!selectedJudge) return;
@@ -117,9 +185,25 @@ const App: React.FC = () => {
         const jScores = newScores[j];
         if (!jScores) return;
 
-        const validValues = Object.values(jScores).filter((v): v is number => v !== null);
-        if (validValues.length > 0) {
-          const jTotal = validValues.reduce((a, b) => a + b, 0);
+        let jTotal = 0;
+        let hasScore = false;
+
+        if (SIMPLE_JUDGES.includes(j)) {
+          // 단순 채점 모드
+          if (jScores.simpleTotal !== null && jScores.simpleTotal !== undefined) {
+             jTotal = jScores.simpleTotal;
+             hasScore = true;
+          }
+        } else {
+          // 세부 채점 모드
+          const validValues = EVALUATION_ITEMS.map(item => jScores[item]).filter((v): v is number => v !== null);
+          if (validValues.length > 0) {
+             jTotal = validValues.reduce((a, b) => a + b, 0);
+             hasScore = true;
+          }
+        }
+
+        if (hasScore) {
           overallTotal += jTotal;
           judgeCount++;
         }
@@ -148,7 +232,13 @@ const App: React.FC = () => {
   const getJudgeTotal = (candidate: Candidate, judge: JudgeName) => {
     const scores = candidate.scores[judge];
     if (!scores) return 0;
-    return Object.values(scores).reduce((sum: number, val) => sum + (val || 0), 0);
+
+    if (SIMPLE_JUDGES.includes(judge)) {
+      return scores.simpleTotal || 0;
+    }
+
+    // EVALUATION_ITEMS만 집계 (simpleTotal 제외)
+    return EVALUATION_ITEMS.reduce((sum: number, item) => sum + (scores[item] || 0), 0);
   };
 
   if (isLoading) {
@@ -201,7 +291,9 @@ const App: React.FC = () => {
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                <h3 style={{ fontSize: '1.4rem', borderLeft: '4px solid var(--primary)', paddingLeft: '1rem' }}>항목별 채점</h3>
+                <h3 style={{ fontSize: '1.4rem', borderLeft: '4px solid var(--primary)', paddingLeft: '1rem' }}>
+                  {SIMPLE_JUDGES.includes(selectedJudge) ? '단순 합산 채점' : '항목별 세부 채점'}
+                </h3>
                 {candidates.map(candidate => (
                   <div key={candidate.id} className="glass-card candidate-row" style={{ padding: '1.5rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem', alignItems: 'center' }}>
@@ -214,25 +306,41 @@ const App: React.FC = () => {
                       </div>
                     </div>
                     
-                    <div className="scoring-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.8rem' }}>
-                      {EVALUATION_ITEMS.map(item => (
-                        <div key={item} style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                          <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-                            {item} ({JUDGE_SCORE_LIMITS[selectedJudge][item]}점)
-                          </label>
-                          <input 
-                            type="number"
-                            className="premium-input score-input"
-                            style={{ padding: '8px', textAlign: 'center' }}
-                            placeholder="0"
-                            min="0"
-                            max={JUDGE_SCORE_LIMITS[selectedJudge][item]}
-                            value={candidate.scores[selectedJudge]?.[item] ?? ''}
-                            onChange={(e) => updateDetailScore(candidate.id, item, e.target.value)}
-                          />
-                        </div>
-                      ))}
-                    </div>
+                    {SIMPLE_JUDGES.includes(selectedJudge) ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                        <label style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>총점 입력 (0~100):</label>
+                        <input 
+                          type="number"
+                          className="premium-input score-input"
+                          style={{ maxWidth: '120px', textAlign: 'center' }}
+                          placeholder="0"
+                          min="0"
+                          max="100"
+                          value={candidate.scores[selectedJudge]?.simpleTotal ?? ''}
+                          onChange={(e) => updateSimpleScore(candidate.id, e.target.value)}
+                        />
+                      </div>
+                    ) : (
+                      <div className="scoring-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.8rem' }}>
+                        {EVALUATION_ITEMS.map(item => (
+                          <div key={item} style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                            <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+                              {item} ({JUDGE_SCORE_LIMITS[selectedJudge][item]}점)
+                            </label>
+                            <input 
+                              type="number"
+                              className="premium-input score-input"
+                              style={{ padding: '8px', textAlign: 'center' }}
+                              placeholder="0"
+                              min="0"
+                              max={JUDGE_SCORE_LIMITS[selectedJudge][item]}
+                              value={candidate.scores[selectedJudge]?.[item] ?? ''}
+                              onChange={(e) => updateDetailScore(candidate.id, item, e.target.value)}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

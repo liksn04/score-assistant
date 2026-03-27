@@ -100,40 +100,26 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="container" style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
-      <header className="fade-in" style={{ textAlign: 'center', marginBottom: '3rem' }}>
+    <div className="container">
+      <header className="fade-in">
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem' }}>
-          <Star size={40} color="var(--primary)" fill="var(--primary)" />
-          <h1 style={{ 
-            fontSize: '3.5rem', 
-            background: 'linear-gradient(to right, #fff, #94a3b8)', 
-            WebkitBackgroundClip: 'text', 
-            WebkitTextFillColor: 'transparent',
-            letterSpacing: '-1px'
-          }}>
-            Audition Master
-          </h1>
+          <Star size={40} className="header-star" color="var(--primary)" fill="var(--primary)" />
+          <h1 className="main-title">Audition Master</h1>
         </div>
-        <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem', fontWeight: 300 }}>Premium Multi-Criteria Scoring System</p>
+        <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem', fontWeight: 300, textAlign: 'center' }}>Premium Multi-Criteria Scoring System</p>
       </header>
 
       {!currentJudge ? (
         <div className="landing-page fade-in">
           {/* Audition Management Panel */}
-          <div className="glass-card" style={{ 
-            padding: '2rem', 
-            marginBottom: '3rem', 
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            background: 'rgba(255, 255, 255, 0.02)'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+          <div className="glass-card" style={{ marginBottom: '3rem' }}>
+            <div className="flex-between" style={{ marginBottom: '2rem', flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                 <Database size={24} color="var(--primary)" />
                 <h2 style={{ fontSize: '1.5rem', fontWeight: 600 }}>오디션 관리</h2>
               </div>
               <button 
                 className="premium-button" 
-                style={{ height: '40px', padding: '0 1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
                 onClick={() => setIsAddingAudition(true)}
               >
                 <Plus size={18} /> 새 오디션 시작
@@ -192,33 +178,22 @@ const App: React.FC = () => {
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', marginBottom: '2rem' }}>
-            <LayoutGrid size={24} color="var(--primary)" />
-            <h2 style={{ fontSize: '1.6rem' }}>심사위원 선택</h2>
+          <div className="flex-between" style={{ marginBottom: '2rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+              <LayoutGrid size={24} color="var(--primary)" />
+              <h2 style={{ fontSize: '1.6rem' }}>심사위원 선택</h2>
+            </div>
           </div>
 
-          <div className="judge-selection" style={{ 
-            display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', 
-            gap: '2rem'
-          }}>
+          <div className="judge-selection">
             {JUDGES.map((judge: JudgeName) => (
               <div 
                 key={judge} 
                 className="glass-card judge-card hover-lift" 
-                style={{ padding: '3rem', cursor: 'pointer', textAlign: 'center', transition: 'all 0.3s ease' }} 
+                style={{ cursor: 'pointer', textAlign: 'center' }} 
                 onClick={() => setSelectedJudgeToAuth(judge)}
               >
-                <div className="judge-icon-wrapper" style={{ 
-                  width: '80px', 
-                  height: '80px', 
-                  margin: '0 auto 1.5rem',
-                  background: 'rgba(124, 58, 237, 0.1)',
-                  borderRadius: '24px',
-                  display: 'flex',
-                  justifyContent: 'center',
-                  alignItems: 'center'
-                }}>
+                <div className="judge-icon-wrapper">
                   <Users size={40} color="var(--primary)" />
                 </div>
                 <h3 style={{ fontSize: '1.8rem', marginBottom: '0.5rem' }}>{judge} 심사위원</h3>
@@ -268,16 +243,16 @@ const App: React.FC = () => {
         </div>
       ) : (
         <div className="dashboard fade-in">
-          <div className="dashboard-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem' }}>
+          <div className="dashboard-header">
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                 <Star size={24} color="#fbbf24" fill="#fbbf24" />
-                <h2 style={{ fontSize: 'calc(1.4rem + 0.5vw)' }}>
+                <h2 style={{ fontSize: '1.6rem', wordBreak: 'keep-all' }}>
                   {isObserver ? '참관자 모니터링' : `${currentJudge} 심사위원`}
                 </h2>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginLeft: '0.2rem' }}>
-                <span className="glass-card" style={{ padding: '0.2rem 0.6rem', fontSize: '0.8rem', background: 'rgba(255,255,255,0.05)' }}>
+                <span className="glass-card" style={{ padding: '0.2rem 0.6rem', width: 'auto', fontSize: '0.8rem', background: 'rgba(255,255,255,0.05)' }}>
                   {activeAudition?.name}
                 </span>
                 <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>보안 세션 활성화</span>
@@ -292,37 +267,30 @@ const App: React.FC = () => {
               }} 
               onClick={logout}
             >
-              <LogOut size={18} style={{ marginRight: '0.5rem' }} /> 
-              {isObserver ? '나가기 (세션 종료)' : '심사 종료 (로그아웃)'}
+              <LogOut size={18} /> 
+              {isObserver ? '나가기' : '심사 종료'}
             </button>
           </div>
 
-          <div className="dashboard-content" style={{ 
-            display: 'grid', 
-            gridTemplateColumns: isObserver ? '1fr' : 'repeat(auto-fit, minmax(350px, 1fr))', 
-            gap: '2.5rem',
-            alignItems: 'start'
-          }}>
+          <div className="dashboard-content">
             {/* Input Section */}
             <section style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
               {!isObserver && (
-                <div className="glass-card fade-in" style={{ padding: '2rem' }}>
+                <div className="glass-card fade-in">
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', marginBottom: '1.5rem' }}>
                     <UserPlus size={22} color="var(--primary)" />
-                    <h3 style={{ fontSize: '1.4rem' }}>새 참가자 등록 ({activeAudition?.name})</h3>
+                    <h3 style={{ fontSize: '1.4rem' }}>새 참가자 등록</h3>
                   </div>
-                  <form onSubmit={addCandidate} style={{ display: 'flex', gap: '1rem', flexDirection: 'column' }}>
-                    <div style={{ display: 'flex', gap: '1rem' }}>
+                  <form onSubmit={addCandidate} className="flex-column" style={{ gap: '1rem' }}>
+                    <div className="input-row" style={{ display: 'flex', gap: '1rem' }}>
                       <input 
                         className="premium-input" 
-                        style={{ flex: 1 }} 
                         placeholder="참가자 이름" 
                         value={newCandidateName} 
                         onChange={(e) => setNewCandidateName(e.target.value)} 
                       />
                       <input 
                         className="premium-input" 
-                        style={{ flex: 1 }} 
                         placeholder="곡명 (예: 밤양갱)" 
                         value={newSongTitle} 
                         onChange={(e) => setNewSongTitle(e.target.value)} 

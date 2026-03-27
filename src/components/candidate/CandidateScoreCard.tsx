@@ -52,7 +52,7 @@ const CandidateScoreCard: React.FC<CandidateScoreCardProps> = ({
   const isCompleted = candidate.scores[selectedJudge]?.isCompleted || false;
 
   return (
-    <div className="glass-card candidate-row" style={{ padding: '1.5rem' }}>
+    <div className="glass-card candidate-row">
       <div className="candidate-row-header">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
           <span style={{ fontSize: '1.2rem', fontWeight: 600 }}>{candidate.name}</span>
@@ -148,7 +148,7 @@ const CandidateScoreCard: React.FC<CandidateScoreCardProps> = ({
               <input 
                 type="number"
                 className="premium-input score-input"
-                style={{ maxWidth: '120px', textAlign: 'center' }}
+                style={{ width: '80px', textAlign: 'center' }}
                 placeholder="0"
                 min="0"
                 max="100"
@@ -179,7 +179,7 @@ const CandidateScoreCard: React.FC<CandidateScoreCardProps> = ({
             </div>
           </div>
         ) : (
-          <div className="scoring-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '1rem' }}>
+          <div className="scoring-grid">
             {EVALUATION_ITEMS.map((item: EvaluationItem) => (
               <div key={item} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255, 255, 255, 0.02)', padding: '0.8rem', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.03)' }}>
                 <label style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', flex: 1 }}>{item} ({JUDGE_SCORE_LIMITS[selectedJudge][item]})</label>

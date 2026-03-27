@@ -31,8 +31,16 @@ export interface Comment {
 }
 
 
+export interface Audition {
+  id: string;
+  name: string;
+  createdAt: any;
+  updatedAt: any;
+}
+
 export interface Candidate {
   id: string;
+  auditionId?: string; // 오디션 식별자 추가
   name: string;
   song?: string;
   // 심사위원별 점수 저장

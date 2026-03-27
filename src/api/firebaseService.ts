@@ -50,8 +50,24 @@ const calculateTotalAndAverage = (scores: Record<string, any>) => {
 };
 
 export const firebaseService = {
+  // 오디션 관리
+  async createAudition(name: string) {
+    return await addDoc(collection(db, 'auditions'), {
+      name,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    });
+  },
+
+  async updateAuditionName(id: string, name: string) {
+    return await updateDoc(doc(db, 'auditions', id), {
+      name,
+      updatedAt: serverTimestamp()
+    });
+  },
+
   // 참가자 추가
-  async addCandidate(name: string, song: string) {
+  async addCandidate(name: string, song: string, auditionId: string) {
     const initialScores: any = {};
     JUDGES.forEach(j => {
       initialScores[j] = { strikes: 0, itemStrikes: {} };
@@ -64,6 +80,7 @@ export const firebaseService = {
     return await addDoc(collection(db, 'candidates'), {
       name,
       song,
+      auditionId,
       scores: initialScores,
       total: 0,
       average: 0,

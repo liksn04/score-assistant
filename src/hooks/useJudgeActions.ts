@@ -3,7 +3,7 @@ import { firebaseService } from '../api/firebaseService';
 import type { Candidate, JudgeName, EvaluationItem } from '../types';
 import { JUDGE_SCORE_LIMITS } from '../types';
 
-export const useJudgeActions = (candidates: Candidate[]) => {
+export const useJudgeActions = (candidates: Candidate[], auditionId: string | null) => {
   const [selectedJudge, setSelectedJudge] = useState<JudgeName | null>(null);
   const isObserver = selectedJudge === '참관자';
   
@@ -17,9 +17,9 @@ export const useJudgeActions = (candidates: Candidate[]) => {
   // 참가자 추가
   const addCandidate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newCandidateName.trim()) return;
+    if (!newCandidateName.trim() || !auditionId) return;
     try {
-      await firebaseService.addCandidate(newCandidateName, newSongTitle);
+      await firebaseService.addCandidate(newCandidateName, newSongTitle, auditionId);
       setNewCandidateName('');
       setNewSongTitle('');
     } catch (error) {

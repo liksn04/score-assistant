@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
-import { collection, query, onSnapshot } from 'firebase/firestore';
+import { collection, query, onSnapshot, where } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import type { Candidate } from '../types';
 
-export const useCandidates = () => {
+export const useCandidates = (auditionId: string | null) => {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -17,7 +17,17 @@ export const useCandidates = () => {
 
   // 실시간 데이터 수신 및 정렬 고정
   useEffect(() => {
-    const q = query(collection(db, 'candidates'));
+    if (!auditionId) {
+      setCandidates([]);
+      setIsLoading(false);
+      return;
+    }
+
+    const q = query(
+      collection(db, 'candidates'),
+      where('auditionId', '==', auditionId)
+    );
+
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map((doc) => ({
         id: doc.id,
@@ -40,7 +50,7 @@ export const useCandidates = () => {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [auditionId]);
 
   return { candidates, sortedCandidates, isLoading };
 };

@@ -364,32 +364,59 @@ const App: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {candidates.map((candidate, index) => (
-                      <tr key={candidate.id} style={{ borderBottom: '1px solid var(--border)', transition: 'background 0.2s' }}>
-                        <td style={{ padding: '1.2rem 0.5rem' }}>
-                          <div style={{ 
-                            width: '30px', height: '30px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            background: index === 0 ? 'rgba(251, 191, 36, 0.2)' : 'rgba(255,255,255,0.05)',
-                            color: index === 0 ? '#fbbf24' : 'var(--text)',
-                            fontWeight: 'bold', border: index === 0 ? '1px solid #fbbf24' : 'none'
-                          }}>
-                            {index + 1}
-                          </div>
-                        </td>
-                        <td style={{ padding: '1.2rem 0.5rem', fontWeight: 500 }}>{candidate.name}</td>
-                        <td style={{ padding: '1.2rem 0.5rem', textAlign: 'center' }}>
-                          <span style={{ 
-                            background: 'linear-gradient(135deg, var(--primary), var(--secondary))',
-                            padding: '6px 14px', borderRadius: '20px', fontSize: '1rem', fontWeight: 'bold'
-                          }}>
-                            {candidate.average}
-                          </span>
-                        </td>
-                        <td style={{ padding: '1.2rem 0.5rem', textAlign: 'right', color: 'var(--text-muted)' }}>
-                          {candidate.total}점
-                        </td>
-                      </tr>
-                    ))}
+                    {candidates.map((candidate, index) => {
+                      const isEliminationRisk = index >= 14;
+                      return (
+                        <tr key={candidate.id} style={{ 
+                          borderBottom: '1px solid var(--border)', 
+                          transition: 'background 0.2s',
+                          background: isEliminationRisk ? 'rgba(244, 63, 94, 0.03)' : 'transparent'
+                        }}>
+                          <td style={{ padding: '1.2rem 0.5rem' }}>
+                            <div style={{ 
+                              width: '30px', height: '30px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              background: index === 0 ? 'rgba(251, 191, 36, 0.2)' : (isEliminationRisk ? 'rgba(244, 63, 94, 0.2)' : 'rgba(255,255,255,0.05)'),
+                              color: index === 0 ? '#fbbf24' : (isEliminationRisk ? '#f43f5e' : 'var(--text)'),
+                              fontWeight: 'bold', 
+                              border: index === 0 ? '1px solid #fbbf24' : (isEliminationRisk ? '1px solid rgba(244, 63, 94, 0.4)' : 'none')
+                            }}>
+                              {index + 1}
+                            </div>
+                          </td>
+                          <td style={{ padding: '1.2rem 0.5rem', fontWeight: 500 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+                              <span style={{ color: isEliminationRisk ? '#f43f5e' : 'inherit' }}>{candidate.name}</span>
+                              {isEliminationRisk && (
+                                <span style={{ 
+                                  fontSize: '0.7rem', 
+                                  backgroundColor: '#f43f5e', 
+                                  color: 'white', 
+                                  padding: '2px 6px', 
+                                  borderRadius: '4px',
+                                  fontWeight: 'bold',
+                                  letterSpacing: '-0.02em'
+                                }}>
+                                  탈락 위기
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td style={{ padding: '1.2rem 0.5rem', textAlign: 'center' }}>
+                            <span style={{ 
+                              background: isEliminationRisk 
+                                ? 'linear-gradient(135deg, #f43f5e, #991b1b)' 
+                                : 'linear-gradient(135deg, var(--primary), var(--secondary))',
+                              padding: '6px 14px', borderRadius: '20px', fontSize: '1rem', fontWeight: 'bold'
+                            }}>
+                              {candidate.average}
+                            </span>
+                          </td>
+                          <td style={{ padding: '1.2rem 0.5rem', textAlign: 'right', color: isEliminationRisk ? '#f43f5e' : 'var(--text-muted)' }}>
+                            {candidate.total}점
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

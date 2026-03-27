@@ -1,6 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 
+// Deployment Trigger: 2026-03-27
 const firebaseConfig = {
   apiKey: "AIzaSyAZK38uirEXB8FQ60kKYDLFuhD_F1q2Qr0",
   authDomain: "score-assistant.firebaseapp.com",

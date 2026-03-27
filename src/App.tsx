@@ -64,11 +64,10 @@ const App: React.FC = () => {
         ...doc.data()
       })) as Candidate[];
       
-      // 입력창 고정을 위해 등록 순으로 정렬 (createdAt 기준 오름차순)
-      // createdAt이 없는 기존 데이터는 id나 updatedAt으로 대체
+      // 입력창 고정을 위해 등록 순으로 정렬 (createdAt 기준 오름차순, 없으면 id 기준)
       const fixedData = [...data].sort((a, b) => {
-        const timeA = a.createdAt?.seconds || a.updatedAt?.seconds || 0;
-        const timeB = b.createdAt?.seconds || b.updatedAt?.seconds || 0;
+        const timeA = a.createdAt?.seconds || 0;
+        const timeB = b.createdAt?.seconds || 0;
         if (timeA !== timeB) return timeA - timeB;
         return a.id.localeCompare(b.id);
       });

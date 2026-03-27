@@ -29,6 +29,12 @@ export interface Comment {
   createdAt: any;
 }
 
+export interface Recording {
+  name: string;
+  url: string;
+  createdAt: any;
+}
+
 export interface Candidate {
   id: string;
   name: string;
@@ -36,6 +42,7 @@ export interface Candidate {
   // 심사위원별 점수 저장
   scores: Record<JudgeName, EvaluationScores>;
   comments?: Comment[]; // 선택적 필드로 추가 (기존 데이터 호환성)
+  recordings?: Recording[];
   total: number;
   average: number;
   createdAt?: any;

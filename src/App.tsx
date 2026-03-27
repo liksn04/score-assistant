@@ -7,10 +7,13 @@ import {
   doc, 
   updateDoc, 
   serverTimestamp,
-  deleteDoc
+  deleteDoc,
+  arrayUnion,
+  arrayRemove
 } from 'firebase/firestore';
-import { db } from './firebaseConfig';
-import type { Candidate, JudgeName, EvaluationItem } from './types';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from './firebaseConfig';
+import type { Candidate, JudgeName, EvaluationItem, Recording } from './types';
 import { JUDGES, EVALUATION_ITEMS, JUDGE_SCORE_LIMITS, SIMPLE_JUDGES } from './types';
 import { 
   Users, 
@@ -23,9 +26,12 @@ import {
   Send,
   MessageSquare,
   ChevronDown, 
-  ChevronUp 
+  ChevronUp,
+  Mic,
+  Music,
+  Upload,
+  Download
 } from 'lucide-react';
-import { arrayUnion, arrayRemove } from 'firebase/firestore';
 
 const App: React.FC = () => {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
@@ -38,6 +44,7 @@ const App: React.FC = () => {
   const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({});
   const [editingSongId, setEditingSongId] = useState<string | null>(null);
   const [tempSongTitle, setTempSongTitle] = useState('');
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
 
   // 실시간 순위 데이터 (순위표 전용)
   const sortedCandidates = React.useMemo(() => {
@@ -560,6 +567,51 @@ const App: React.FC = () => {
                           </div>
                         </div>
                       )}
+
+                      {/* Recordings Section */}
+                      <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <Mic size={16} color="var(--text-muted)" />
+                            <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: 500 }}>현장 녹음 ({candidate.recordings?.length || 0})</span>
+                          </div>
+                          {!isObserver && (
+                            <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', color: 'var(--primary)', background: 'rgba(99, 102, 241, 0.1)', padding: '4px 10px', borderRadius: '6px', transition: 'all 0.2s' }}>
+                              <Upload size={14} />
+                              <span>{uploadingId === candidate.id ? '업로드 중...' : '파일 추가'}</span>
+                              <input type="file" accept="audio/*" style={{ display: 'none' }} disabled={uploadingId === candidate.id} onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) handleRecordingUpload(candidate.id, file);
+                                e.target.value = '';
+                              }} />
+                            </label>
+                          )}
+                        </div>
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                          {candidate.recordings && candidate.recordings.length > 0 ? candidate.recordings.map((rec, idx) => (
+                            <div key={idx} style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '0.8rem', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.05)', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                  <Music size={14} color="var(--primary)" />
+                                  <span style={{ fontSize: '0.85rem', color: 'var(--text)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '180px' }}>{rec.name}</span>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                                  <a href={rec.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-muted)', display: 'flex' }}><Download size={14} /></a>
+                                  {!isObserver && (
+                                    <button onClick={() => deleteRecording(candidate.id, rec)} style={{ background: 'none', border: 'none', color: 'rgba(244, 63, 94, 0.6)', cursor: 'pointer', padding: '2px' }}><Trash2 size={14} /></button>
+                                  )}
+                                </div>
+                              </div>
+                              <audio src={rec.url} controls style={{ width: '100%', height: '32px', filter: 'invert(1) hue-rotate(180deg) brightness(1.5)' }} />
+                            </div>
+                          )) : (
+                            <div style={{ textAlign: 'center', padding: '1.5rem', background: 'rgba(255, 255, 255, 0.01)', borderRadius: '12px', border: '1px dashed rgba(255, 255, 255, 0.05)' }}>
+                              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>업로드된 녹음 파일이 없습니다.</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 ))}

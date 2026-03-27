@@ -53,3 +53,11 @@ export interface Candidate {
 }
 
 export const JUDGES: JudgeName[] = ["준모", "정현", "진하", "참관자"];
+
+// 심사위원별 6자리 PIN 번호 매핑
+export const JUDGE_PINS: Record<JudgeName, string> = {
+  '준모': '111111',
+  '진하': '222222',
+  '정현': '333333',
+  '참관자': '000000'
+};

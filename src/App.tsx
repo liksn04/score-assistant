@@ -1,15 +1,15 @@
 import React from 'react';
 import type { Candidate, JudgeName, EvaluationItem } from './types';
-import { SIMPLE_JUDGES, EVALUATION_ITEMS } from './types';
+import { SIMPLE_JUDGES, EVALUATION_ITEMS, JUDGES } from './types';
 import { useCandidates } from './hooks/useCandidates';
 import { useJudgeActions } from './hooks/useJudgeActions';
 import { useAuditions } from './hooks/useAuditions';
 import { useAuth } from './hooks/useAuth';
 import { firebaseService } from './api/firebaseService';
-import Login from './components/auth/Login';
+import PinModal from './components/auth/PinModal';
 import { 
   Users, Star, LogOut, UserPlus, ChevronDown, ChevronUp, 
-  CheckCircle, Plus, Edit2, Database, LayoutGrid, ShieldAlert, ShieldCheck
+  CheckCircle, Plus, Edit2, Database, LayoutGrid
 } from 'lucide-react';
 import CandidateScoreCard from './components/candidate/CandidateScoreCard';
 import Leaderboard from './components/leaderboard/Leaderboard';
@@ -18,8 +18,9 @@ const App: React.FC = () => {
   const [isCompletedExpanded, setIsCompletedExpanded] = React.useState(false);
   const [isAddingAudition, setIsAddingAudition] = React.useState(false);
   const [newAuditionName, setNewAuditionName] = React.useState('');
+  const [selectedJudgeToAuth, setSelectedJudgeToAuth] = React.useState<JudgeName | null>(null);
 
-  const { user, judgeRole, isLoadingAuth, login, logout } = useAuth();
+  const { judgeRole, isLoadingAuth, loginWithPin, logout } = useAuth();
   const { auditions, activeAuditionId, setActiveAuditionId, isLoading: isAuditionLoading } = useAuditions();
   const { candidates, sortedCandidates, isLoading: isCandidatesLoading } = useCandidates(activeAuditionId);
   
@@ -41,6 +42,9 @@ const App: React.FC = () => {
   React.useEffect(() => {
     if (judgeRole) {
       setSelectedJudge(judgeRole);
+      setSelectedJudgeToAuth(null);
+    } else {
+      setSelectedJudge(null);
     }
   }, [judgeRole, setSelectedJudge]);
 
@@ -91,31 +95,6 @@ const App: React.FC = () => {
         fontSize: '1.2rem'
       }}>
         <div className="fade-in">시스탬 준비 중...</div>
-      </div>
-    );
-  }
-
-  // 로그인하지 않은 경우
-  if (!user) {
-    return <Login onLogin={login} />;
-  }
-
-  // 인증은 되었으나 심사위원 명단에 없는 이메일인 경우
-  if (!judgeRole) {
-    return (
-      <div style={{ 
-        height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', 
-        background: 'var(--bg-dark)', color: 'white' 
-      }}>
-        <div className="glass-card" style={{ padding: '3rem', textAlign: 'center', maxWidth: '500px' }}>
-          <ShieldAlert size={64} color="#f43f5e" style={{ marginBottom: '1.5rem' }} />
-          <h2 style={{ fontSize: '1.8rem', marginBottom: '1rem' }}>접근 권한 없음</h2>
-          <p style={{ color: 'var(--text-muted)', marginBottom: '2rem', lineHeight: 1.6 }}>
-            인증된 계정(<strong>{user.email}</strong>)은 등록된 심사위원 명단에 없습니다. <br />
-            관리자에게 문의하거나 다른 계정으로 로그인해 주세요.
-          </p>
-          <button className="premium-button" onClick={logout} style={{ width: '100%' }}>다른 계정으로 로그인</button>
-        </div>
       </div>
     );
   }
@@ -215,16 +194,20 @@ const App: React.FC = () => {
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', marginBottom: '2rem' }}>
             <LayoutGrid size={24} color="var(--primary)" />
-            <h2 style={{ fontSize: '1.6rem' }}>내 역할 확인</h2>
+            <h2 style={{ fontSize: '1.6rem' }}>심사위원 선택</h2>
           </div>
 
           <div className="judge-selection" style={{ 
-            maxWidth: '400px', margin: '0 auto'
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', 
+            gap: '2rem'
           }}>
+            {JUDGES.map((judge: JudgeName) => (
               <div 
+                key={judge} 
                 className="glass-card judge-card hover-lift" 
-                style={{ padding: '3rem', cursor: 'pointer', textAlign: 'center', transition: 'all 0.3s ease', border: '2px solid var(--primary)' }} 
-                onClick={() => setSelectedJudge(judgeRole)}
+                style={{ padding: '3rem', cursor: 'pointer', textAlign: 'center', transition: 'all 0.3s ease' }} 
+                onClick={() => setSelectedJudgeToAuth(judge)}
               >
                 <div className="judge-icon-wrapper" style={{ 
                   width: '80px', 
@@ -236,16 +219,22 @@ const App: React.FC = () => {
                   justifyContent: 'center',
                   alignItems: 'center'
                 }}>
-                  <ShieldCheck size={40} color="var(--primary)" />
+                  <Users size={40} color="var(--primary)" />
                 </div>
-                <h3 style={{ fontSize: '1.8rem', marginBottom: '0.5rem' }}>{judgeRole} 심사위원</h3>
+                <h3 style={{ fontSize: '1.8rem', marginBottom: '0.5rem' }}>{judge} 심사위원</h3>
                 <p style={{ color: 'var(--text-muted)' }}>심사 시작하기 &rarr;</p>
               </div>
+            ))}
           </div>
 
-          <button onClick={logout} className="premium-button secondary-btn" style={{ marginTop: '2rem', margin: '2rem auto', display: 'flex' }}>
-            <LogOut size={18} style={{ marginRight: '0.5rem' }} /> 로그아웃
-          </button>
+          {/* PIN Verification Modal */}
+          {selectedJudgeToAuth && (
+            <PinModal 
+              judgeName={selectedJudgeToAuth}
+              onVerify={(pin) => loginWithPin(selectedJudgeToAuth, pin)}
+              onClose={() => setSelectedJudgeToAuth(null)}
+            />
+          )}
 
           {/* New Audition Modal */}
           {isAddingAudition && (
@@ -290,7 +279,7 @@ const App: React.FC = () => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', marginLeft: '2.5rem' }}>
                 <p style={{ color: 'var(--text-muted)' }}>현재 오디션: <strong>{activeAudition?.name}</strong></p>
                 <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)' }} />
-                <p style={{ color: 'var(--text-muted)' }}>로그인 계정: <strong>{user?.email}</strong></p>
+                <p style={{ color: 'var(--text-muted)' }}>보안 세션 활성화됨</p>
               </div>
             </div>
             <button 
@@ -303,7 +292,7 @@ const App: React.FC = () => {
               onClick={logout}
             >
               <LogOut size={18} style={{ marginRight: '0.5rem' }} /> 
-              {isObserver ? '로그아웃 및 나가기' : '심사 종료(로그아웃)'}
+              {isObserver ? '나가기 (세션 종료)' : '심사 종료 (로그아웃)'}
             </button>
           </div>
 

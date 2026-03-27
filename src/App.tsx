@@ -10,15 +10,15 @@ import {
   deleteDoc
 } from 'firebase/firestore';
 import { db } from './firebaseConfig';
-import type { Candidate, JudgeName } from './types';
-import { JUDGES } from './types';
+import type { Candidate, JudgeName, EvaluationItem } from './types';
+import { JUDGES, EVALUATION_ITEMS, JUDGE_SCORE_LIMITS } from './types';
 import { 
   Users, 
-  Plus, 
   Trophy, 
   UserPlus, 
   Trash2, 
-  LogOut
+  LogOut,
+  Star
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -52,14 +52,19 @@ const App: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
-  // 참가자 추가
+  // 참가자 추가 시 세부 항목 초기화
   const addCandidate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCandidateName.trim()) return;
 
     try {
-      const initialScores: Record<string, number | null> = {};
-      JUDGES.forEach(j => initialScores[j] = null);
+      const initialScores: any = {};
+      JUDGES.forEach(j => {
+        initialScores[j] = {};
+        EVALUATION_ITEMS.forEach(item => {
+          initialScores[j][item] = null;
+        });
+      });
 
       await addDoc(collection(db, 'candidates'), {
         name: newCandidateName,
@@ -74,34 +79,18 @@ const App: React.FC = () => {
     }
   };
 
-  // 점수 업데이트 로직
-  const updateScore = async (candidateId: string, scoreStr: string) => {
+  // 세부 점수 업데이트 로직
+  const updateDetailScore = async (candidateId: string, item: EvaluationItem, scoreStr: string) => {
     if (!selectedJudge) return;
 
-    // Edge Case: 빈 문자열 처리
-    if (scoreStr.trim() === "") {
-        const candidate = candidates.find(c => c.id === candidateId);
-        if (!candidate) return;
+    let score: number | null = scoreStr.trim() === "" ? null : parseInt(scoreStr);
 
-        const updatedScores = { ...candidate.scores, [selectedJudge]: null };
-        const validScores = Object.values(updatedScores).filter((s): s is number => s !== null);
-        const total = validScores.reduce((a, b) => a + b, 0);
-        const avg = validScores.length > 0 ? Number((total / validScores.length).toFixed(2)) : 0;
+    // 심사위원별/항목별 한도 가져오기
+    const maxScore = JUDGE_SCORE_LIMITS[selectedJudge][item];
 
-        await updateDoc(doc(db, 'candidates', candidateId), {
-            scores: updatedScores,
-            total,
-            average: avg,
-            updatedAt: serverTimestamp()
-        });
-        return;
-    }
-
-    const score = parseInt(scoreStr);
-
-    // Edge Case: 숫자 유효성 검사 (0~100)
-    if (isNaN(score) || score < 0 || score > 100) {
-      alert("0에서 100 사이의 숫자를 입력해주세요.");
+    // 유효성 검사
+    if (score !== null && (isNaN(score) || score < 0 || score > maxScore)) {
+      alert(`0에서 ${maxScore} 사이의 숫자를 입력해주세요. (${item} 항목 한도: ${maxScore}점)`);
       return;
     }
 
@@ -109,17 +98,39 @@ const App: React.FC = () => {
     if (!candidate) return;
 
     try {
-      const updatedScores = { ...candidate.scores, [selectedJudge]: score };
-      const validScores = Object.values(updatedScores).filter((s): s is number => s !== null);
-      const total = validScores.reduce((a, b) => a + b, 0);
+      // 해당 심사위원의 세부 점수 업데이트
+      const updatedJudgeScores = { 
+        ...candidate.scores[selectedJudge], 
+        [item]: score 
+      };
       
-      // 실제 평균은 채점한 사람 기준이 일반적일 수 있음. 여기서는 채점한 인원 기준으로 우선 구현
-      const dynamicAvg = validScores.length > 0 ? Number((total / validScores.length).toFixed(2)) : 0;
+      const newScores = {
+        ...candidate.scores,
+        [selectedJudge]: updatedJudgeScores
+      };
+
+      // 전체 통계 재계산
+      let overallTotal = 0;
+      let judgeCount = 0;
+
+      JUDGES.forEach(j => {
+        const jScores = newScores[j];
+        if (!jScores) return;
+
+        const validValues = Object.values(jScores).filter((v): v is number => v !== null);
+        if (validValues.length > 0) {
+          const jTotal = validValues.reduce((a, b) => a + b, 0);
+          overallTotal += jTotal;
+          judgeCount++;
+        }
+      });
+
+      const average = judgeCount > 0 ? Number((overallTotal / judgeCount).toFixed(2)) : 0;
 
       await updateDoc(doc(db, 'candidates', candidateId), {
-        scores: updatedScores,
-        total: total,
-        average: dynamicAvg, // 현재 채점된 기준 평균
+        scores: newScores,
+        total: overallTotal,
+        average: average,
         updatedAt: serverTimestamp()
       });
     } catch (error) {
@@ -133,129 +144,142 @@ const App: React.FC = () => {
     }
   };
 
+  // 심사위원별 총점 계산 도우미
+  const getJudgeTotal = (candidate: Candidate, judge: JudgeName) => {
+    const scores = candidate.scores[judge];
+    if (!scores) return 0;
+    return Object.values(scores).reduce((sum: number, val) => sum + (val || 0), 0);
+  };
+
   if (isLoading) {
-    return <div className="loading">로딩 중...</div>;
+    return <div className="loading" style={{ color: 'white', textAlign: 'center', marginTop: '20%' }}>데이터 로드 중...</div>;
   }
 
   return (
-    <div className="container" style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto' }}>
-      {/* Header */}
+    <div className="container" style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
       <header className="fade-in" style={{ textAlign: 'center', marginBottom: '3rem' }}>
         <h1 style={{ fontSize: '3rem', marginBottom: '0.5rem', background: 'linear-gradient(to right, #fff, #94a3b8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
           Audition Master
         </h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>Premium Audition Scoring System</p>
+        <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>Premium Multi-Criteria Scoring System</p>
       </header>
 
       {!selectedJudge ? (
-        /* Judge Selection */
-        <div className="judge-selection fade-in" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.5rem' }}>
+        <div className="judge-selection fade-in" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '2rem' }}>
           {JUDGES.map(judge => (
-            <div 
-              key={judge} 
-              className="glass-card" 
-              style={{ padding: '2.5rem', cursor: 'pointer', textAlign: 'center' }}
-              onClick={() => setSelectedJudge(judge)}
-            >
-              <Users size={48} style={{ marginBottom: '1rem', color: 'var(--primary)' }} />
-              <h2 style={{ fontSize: '1.5rem' }}>{judge} 심사위원</h2>
-              <p style={{ color: 'var(--text-muted)', marginTop: '0.5rem' }}>점수를 입력하려면 선택하세요</p>
+            <div key={judge} className="glass-card" style={{ padding: '3rem', cursor: 'pointer', textAlign: 'center' }} onClick={() => setSelectedJudge(judge)}>
+              <Users size={56} style={{ marginBottom: '1.5rem', color: 'var(--primary)' }} />
+              <h2 style={{ fontSize: '1.8rem' }}>{judge} 심사위원</h2>
+              <p style={{ color: 'var(--text-muted)', marginTop: '0.5rem' }}>심사 시작하기</p>
             </div>
           ))}
         </div>
       ) : (
-        /* Judge Dashboard */
         <div className="dashboard fade-in">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-              <Users color="var(--primary)" />
-              <h2 style={{ fontSize: '1.8rem' }}>{selectedJudge} 심사위원님, 환영합니다.</h2>
+              <Star color="#fbbf24" fill="#fbbf24" />
+              <h2 style={{ fontSize: '1.8rem' }}>{selectedJudge} 심사위원 대시보드</h2>
             </div>
-            <button className="premium-button" style={{ background: 'rgba(244, 63, 94, 0.2)', color: '#f43f5e', border: '1px solid rgba(244, 63, 94, 0.3)' }} onClick={() => setSelectedJudge(null)}>
+            <button className="premium-button logout-btn" style={{ background: 'rgba(244, 63, 94, 0.1)', color: '#f43f5e', border: '1px solid rgba(244, 63, 94, 0.2)' }} onClick={() => setSelectedJudge(null)}>
               <LogOut size={18} style={{ marginRight: '0.5rem' }} /> 심사 종료
             </button>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '2rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '2.5rem' }}>
             {/* Input Section */}
-            <section className="glass-card" style={{ padding: '2rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem' }}>
-                <UserPlus size={20} color="var(--primary)" />
-                <h3 style={{ fontSize: '1.3rem' }}>참가자 등록</h3>
+            <section>
+              <div className="glass-card" style={{ padding: '2rem', marginBottom: '2rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem' }}>
+                  <UserPlus size={22} color="var(--primary)" />
+                  <h3 style={{ fontSize: '1.4rem' }}>새 참가자 등록</h3>
+                </div>
+                <form onSubmit={addCandidate} style={{ display: 'flex', gap: '1rem' }}>
+                  <input className="premium-input" style={{ flex: 1 }} placeholder="참가자 이름을 입력하세요" value={newCandidateName} onChange={(e) => setNewCandidateName(e.target.value)} />
+                  <button type="submit" className="premium-button">등록</button>
+                </form>
               </div>
-              <form onSubmit={addCandidate} style={{ display: 'flex', gap: '0.5rem' }}>
-                <input 
-                  className="premium-input" 
-                  style={{ flex: 1 }}
-                  placeholder="참가자 이름을 입력하세요"
-                  value={newCandidateName}
-                  onChange={(e) => setNewCandidateName(e.target.value)}
-                />
-                <button type="submit" className="premium-button">
-                  <Plus size={20} />
-                </button>
-              </form>
 
-              <div style={{ marginTop: '2.5rem' }}>
-                <h3 style={{ fontSize: '1.3rem', marginBottom: '1rem' }}>실시간 점수 입력</h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-                  {candidates.map(candidate => (
-                    <div key={candidate.id} className="glass-card" style={{ padding: '1rem', background: 'rgba(255,255,255,0.03)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span style={{ fontWeight: 500 }}>{candidate.name}</span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
-                        <input 
-                          type="number"
-                          className="premium-input"
-                          style={{ width: '80px', textAlign: 'center', padding: '8px' }}
-                          placeholder="0-100"
-                          value={candidate.scores[selectedJudge] ?? ''}
-                          onChange={(e) => updateScore(candidate.id, e.target.value)}
-                        />
-                        <button onClick={() => deleteCandidate(candidate.id, candidate.name)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
-                          <Trash2 size={16} />
-                        </button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                <h3 style={{ fontSize: '1.4rem', borderLeft: '4px solid var(--primary)', paddingLeft: '1rem' }}>항목별 채점</h3>
+                {candidates.map(candidate => (
+                  <div key={candidate.id} className="glass-card candidate-row" style={{ padding: '1.5rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem', alignItems: 'center' }}>
+                      <span style={{ fontSize: '1.2rem', fontWeight: 600 }}>{candidate.name}</span>
+                      <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                         <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>현재 총점: <strong style={{ color: 'var(--primary)' }}>{getJudgeTotal(candidate, selectedJudge)}</strong>/100</span>
+                         <button onClick={() => deleteCandidate(candidate.id, candidate.name)} style={{ background: 'none', border: 'none', color: 'rgba(244, 63, 94, 0.6)', cursor: 'pointer' }}>
+                           <Trash2 size={18} />
+                         </button>
                       </div>
                     </div>
-                  ))}
-                </div>
+                    
+                    <div className="scoring-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.8rem' }}>
+                      {EVALUATION_ITEMS.map(item => (
+                        <div key={item} style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                          <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+                            {item} ({JUDGE_SCORE_LIMITS[selectedJudge][item]}점)
+                          </label>
+                          <input 
+                            type="number"
+                            className="premium-input score-input"
+                            style={{ padding: '8px', textAlign: 'center' }}
+                            placeholder="0"
+                            min="0"
+                            max={JUDGE_SCORE_LIMITS[selectedJudge][item]}
+                            value={candidate.scores[selectedJudge]?.[item] ?? ''}
+                            onChange={(e) => updateDetailScore(candidate.id, item, e.target.value)}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
             </section>
 
-            {/* Leaderboard Section */}
-            <section className="glass-card" style={{ padding: '2rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem' }}>
-                <Trophy size={20} color="#fbbf24" />
-                <h3 style={{ fontSize: '1.3rem' }}>실시간 리더보드</h3>
+            {/* Results Section */}
+            <section className="glass-card" style={{ padding: '2rem', height: 'fit-content' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '2rem' }}>
+                <Trophy size={22} color="#fbbf24" />
+                <h3 style={{ fontSize: '1.4rem' }}>실시간 순위 현황</h3>
               </div>
               
-              <div className="leaderboard" style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+              <div className="leaderboard-table" style={{ width: '100%' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
-                    <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}>
-                      <th style={{ padding: '1rem' }}>순위</th>
-                      <th style={{ padding: '1rem' }}>이름</th>
-                      <th style={{ padding: '1rem' }}>평균</th>
-                      <th style={{ padding: '1rem', textAlign: 'center' }}>총점</th>
+                    <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                      <th style={{ padding: '1rem 0.5rem', textAlign: 'left' }}>순위</th>
+                      <th style={{ padding: '1rem 0.5rem', textAlign: 'left' }}>이름</th>
+                      <th style={{ padding: '1rem 0.5rem', textAlign: 'center' }}>평균 점수</th>
+                      <th style={{ padding: '1rem 0.5rem', textAlign: 'right' }}>전체 합산</th>
                     </tr>
                   </thead>
                   <tbody>
                     {candidates.map((candidate, index) => (
                       <tr key={candidate.id} style={{ borderBottom: '1px solid var(--border)', transition: 'background 0.2s' }}>
-                        <td style={{ padding: '1rem' }}>
-                          <span style={{ 
-                            color: index === 0 ? '#fbbf24' : (index === 1 ? '#cbd5e1' : (index === 2 ? '#b45309' : 'var(--text)')),
-                            fontWeight: index < 3 ? 'bold' : 'normal'
+                        <td style={{ padding: '1.2rem 0.5rem' }}>
+                          <div style={{ 
+                            width: '30px', height: '30px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            background: index === 0 ? 'rgba(251, 191, 36, 0.2)' : 'rgba(255,255,255,0.05)',
+                            color: index === 0 ? '#fbbf24' : 'var(--text)',
+                            fontWeight: 'bold', border: index === 0 ? '1px solid #fbbf24' : 'none'
                           }}>
-                            {index + 1}위
+                            {index + 1}
+                          </div>
+                        </td>
+                        <td style={{ padding: '1.2rem 0.5rem', fontWeight: 500 }}>{candidate.name}</td>
+                        <td style={{ padding: '1.2rem 0.5rem', textAlign: 'center' }}>
+                          <span style={{ 
+                            background: 'linear-gradient(135deg, var(--primary), var(--secondary))',
+                            padding: '6px 14px', borderRadius: '20px', fontSize: '1rem', fontWeight: 'bold'
+                          }}>
+                            {candidate.average}
                           </span>
                         </td>
-                        <td style={{ padding: '1rem', fontWeight: 500 }}>{candidate.name}</td>
-                        <td style={{ padding: '1rem' }}>
-                          <span style={{ background: 'rgba(99, 102, 241, 0.1)', color: 'var(--primary)', padding: '4px 10px', borderRadius: '20px', fontSize: '0.9rem' }}>
-                            {candidate.average}점
-                          </span>
+                        <td style={{ padding: '1.2rem 0.5rem', textAlign: 'right', color: 'var(--text-muted)' }}>
+                          {candidate.total}점
                         </td>
-                        <td style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)' }}>{candidate.total}점</td>
                       </tr>
                     ))}
                   </tbody>

@@ -10,8 +10,7 @@ import PinModal from './components/auth/PinModal';
 import CandidateScoreCard from './components/candidate/CandidateScoreCard';
 import Leaderboard from './components/leaderboard/Leaderboard';
 import StatisticsPanel from './components/stats/StatisticsPanel';
-import { Archive, LogOut, Star, UserPlus, Users, LayoutGrid, Plus, Edit2, CheckCircle, ChevronDown, ChevronUp, Database, Download } from 'lucide-react';
-import { exportToExcel } from './utils/exportUtils';
+import { LogOut, Star, UserPlus, Users, LayoutGrid, Plus, Edit2, CheckCircle, ChevronDown, ChevronUp, Database } from 'lucide-react';
 
 const App: React.FC = () => {
   const [isCompletedExpanded, setIsCompletedExpanded] = React.useState(false);
@@ -76,31 +75,6 @@ const App: React.FC = () => {
     }
   };
 
-  const handleExport = () => {
-    if (!activeAuditionId || !activeAudition) return;
-    exportToExcel(candidates, activeAudition.name);
-  };
-
-  const handleArchiveAudition = async () => {
-    if (!activeAuditionId || !activeAudition) return;
-    if (isArchived) {
-      if (window.confirm("이 오디션의 아카이브를 해제하고 수정을 허용하시겠습니까?")) {
-        try {
-          await firebaseService.updateAuditionStatus(activeAuditionId, 'active');
-        } catch (error) {
-          alert("상태 변경 중 오류가 발생했습니다.");
-        }
-      }
-    } else {
-      if (window.confirm("이 오디션을 종료하고 아카이브하시겠습니까? 종료 후에는 점수 수정이 불가능합니다.")) {
-        try {
-          await firebaseService.updateAuditionStatus(activeAuditionId, 'archived');
-        } catch (error) {
-          alert("오디션 종료 중 오류가 발생했습니다.");
-        }
-      }
-    }
-  };
 
   // 심사위원별 총점 계산 도우미
   const getJudgeTotal = (candidate: Candidate, judge: JudgeName) => {
@@ -285,31 +259,7 @@ const App: React.FC = () => {
                 <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>보안 세션 활성화</span>
               </div>
             </div>
-              <button 
-                className="premium-button" 
-                style={{ 
-                  background: 'rgba(56, 189, 248, 0.1)', 
-                  color: '#38bdf8', 
-                  border: '1px solid rgba(56, 189, 248, 0.2)' 
-                }} 
-                onClick={handleExport}
-                title="엑셀로 내보내기"
-              >
-                <Download size={18} /> 엑셀 저장
-              </button>
-              <button 
-                className="premium-button" 
-                style={{ 
-                  background: isArchived ? 'rgba(234, 179, 8, 0.1)' : 'rgba(255, 255, 255, 0.05)', 
-                  color: isArchived ? '#eab308' : 'white', 
-                  border: `1px solid ${isArchived ? 'rgba(234, 179, 8, 0.2)' : 'rgba(255, 255, 255, 0.1)'}` 
-                }} 
-                onClick={handleArchiveAudition}
-                title={isArchived ? "아카이브 해제" : "오디션 종료 및 아카이브"}
-              >
-                <Archive size={18} /> {isArchived ? '아카이브 해제' : '오디션 종료'}
-              </button>
-              <button 
+            <button 
                 className="premium-button logout-btn" 
                 style={{ 
                   background: 'rgba(244, 63, 94, 0.1)', 

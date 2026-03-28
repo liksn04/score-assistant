@@ -18,28 +18,30 @@ export interface CandidateStats {
 export const calculateStats = (candidates: Candidate[]) => {
   if (candidates.length === 0) return null;
 
-  // 1. 심사위원별 통계
-  const judgeStats = JUDGES.map(judge => {
-    const scores = candidates
-      .map(c => {
-        const s = c.scores[judge];
-        if (!s || !s.isCompleted) return null;
-        if (SIMPLE_JUDGES.includes(judge)) return s.simpleTotal || 0;
-        // 상세 심사위원은 총점 계산
-        return Object.entries(s)
-          .filter(([key]) => !['isCompleted', 'simpleTotal', 'itemStrikes', 'strikes'].includes(key))
-          .reduce((sum, [_, val]) => sum + (Number(val) || 0), 0);
-      })
-      .filter((s): s is number => s !== null);
+  // 1. 심사위원별 통계 (점수를 매기지 않는 '참관자'는 제외)
+  const judgeStats = JUDGES
+    .filter(judge => judge !== '참관자')
+    .map(judge => {
+      const scores = candidates
+        .map(c => {
+          const s = c.scores[judge];
+          if (!s || !s.isCompleted) return null;
+          if (SIMPLE_JUDGES.includes(judge)) return s.simpleTotal || 0;
+          // 상세 심사위원은 총점 계산
+          return Object.entries(s)
+            .filter(([key]) => !['isCompleted', 'simpleTotal', 'itemStrikes', 'strikes'].includes(key))
+            .reduce((sum, [_, val]) => sum + (Number(val) || 0), 0);
+        })
+        .filter((s): s is number => s !== null);
 
-    const average = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
-    
-    return {
-      judgeName: judge,
-      averageScore: Number(average.toFixed(1)),
-      count: scores.length
-    };
-  });
+      const average = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
+      
+      return {
+        judgeName: judge,
+        averageScore: Number(average.toFixed(1)),
+        count: scores.length
+      };
+    });
 
   // 2. 후보자별 심사위원 간 편차
   const candidateStats = candidates.map(c => {

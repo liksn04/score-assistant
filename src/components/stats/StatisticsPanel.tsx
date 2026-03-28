@@ -82,7 +82,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ candidates, activeAud
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '2rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 0.8fr) 1.2fr', gap: '2rem' }}>
         {/* 심사위원별 평균 점수 */}
         <div className="glass-card" style={{ padding: '1.5rem', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1.5rem' }}>
@@ -118,7 +118,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ candidates, activeAud
           </div>
           <div style={{ width: '100%', height: '280px' }}>
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={stats.candidateStats.slice(0, 10)}>
+              <LineChart data={[...stats.candidateStats].sort((a, b) => b.std - a.std).slice(0, 20)}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
                 <XAxis dataKey="name" stroke="var(--text-muted)" fontSize={12} tickLine={false} axisLine={false} dy={10} />
                 <YAxis stroke="var(--text-muted)" fontSize={12} tickLine={false} axisLine={false} />

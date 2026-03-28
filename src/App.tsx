@@ -104,19 +104,19 @@ const App: React.FC = () => {
 
   return (
     <div className="container">
-      <header className="fade-in">
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem' }}>
-          <Star size={40} className="header-star" color="var(--primary)" fill="var(--primary)" />
-          <h1 className="main-title">Audition Master</h1>
+      <header className="fade-in" style={{ padding: '2rem 0 3rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.8rem', marginBottom: '0.2rem' }}>
+          <Star size={36} className="header-star" color="var(--primary)" fill="var(--primary)" />
+          <h1 className="main-title" style={{ marginBottom: 0 }}>Audition Master</h1>
         </div>
-        <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem', fontWeight: 300, textAlign: 'center' }}>Premium Multi-Criteria Scoring System</p>
+        <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '1.05rem', fontWeight: 400, textAlign: 'center', letterSpacing: '0.5px' }}>Premium Multi-Criteria Scoring System</p>
       </header>
 
       {!currentJudge ? (
         <div className="landing-page fade-in">
           {/* Audition Management Panel */}
-          <div className="glass-card" style={{ marginBottom: '3rem' }}>
-            <div className="flex-between" style={{ marginBottom: '2rem', flexWrap: 'wrap' }}>
+          <div className="glass-card" style={{ padding: '2.2rem 2.5rem', marginBottom: '3.5rem' }}>
+            <div className="flex-between" style={{ marginBottom: '2.2rem', flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                 <Database size={24} color="var(--primary)" />
                 <h2 style={{ fontSize: '1.5rem', fontWeight: 600 }}>오디션 관리</h2>
@@ -129,7 +129,7 @@ const App: React.FC = () => {
               </button>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.8rem' }}>
               {/* Audition Selection Card */}
               <div className="glass-card inner-card" style={{ padding: '1.5rem', background: 'rgba(0,0,0,0.2)' }}>
                 <label style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '0.8rem' }}>활성 오디션 선택</label>
@@ -188,7 +188,7 @@ const App: React.FC = () => {
             </div>
           </div>
 
-          <div className="judge-selection">
+          <div className="judge-selection" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.5rem' }}>
             {JUDGES.map((judge: JudgeName) => (
               <div 
                 key={judge} 
@@ -199,8 +199,8 @@ const App: React.FC = () => {
                 <div className="judge-icon-wrapper">
                   <Users size={40} color="var(--primary)" />
                 </div>
-                <h3 style={{ fontSize: '1.8rem', marginBottom: '0.5rem' }}>{judge} 심사위원</h3>
-                <p style={{ color: 'var(--text-muted)' }}>심사 시작하기 &rarr;</p>
+                <h3 style={{ fontSize: '1.6rem', marginBottom: '0.5rem', fontWeight: 600 }}>{judge} 심사위원</h3>
+                <p style={{ color: 'var(--primary)', fontSize: '0.9rem', fontWeight: 'bold' }}>심사 시작하기 &rarr;</p>
               </div>
             ))}
           </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Lock, X, Loader2, ShieldCheck, Asterisk } from 'lucide-react';
+import { Lock, X, Loader2, ShieldCheck } from 'lucide-react';
 import type { JudgeName } from '../../types';
 
 interface PinModalProps {
@@ -12,6 +12,7 @@ const PinModal: React.FC<PinModalProps> = ({ judgeName, onVerify, onClose }) => 
   const [pin, setPin] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isShake, setIsShake] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -20,6 +21,11 @@ const PinModal: React.FC<PinModalProps> = ({ judgeName, onVerify, onClose }) => 
     }
   }, []);
 
+  const triggerShake = () => {
+    setIsShake(true);
+    setTimeout(() => setIsShake(false), 500);
+  };
+
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (pin.length !== 6) return;
@@ -27,17 +33,22 @@ const PinModal: React.FC<PinModalProps> = ({ judgeName, onVerify, onClose }) => 
     setError(null);
     setIsLoading(true);
     try {
-      await onVerify(pin);
+      const success = await onVerify(pin);
+      if (!success) {
+        triggerShake();
+        setError('PIN 번호가 일치하지 않습니다.');
+        setPin('');
+      }
     } catch (err: any) {
-      setError(err.message);
-      setPin(''); // 오류 시 초기화
+      triggerShake();
+      setError(err.message || '인증 중 오류가 발생했습니다.');
+      setPin('');
       inputRef.current?.focus();
     } finally {
       setIsLoading(false);
     }
   };
 
-  // 6자리가 입력되면 자동 제출
   useEffect(() => {
     if (pin.length === 6) {
       handleSubmit();
@@ -45,49 +56,79 @@ const PinModal: React.FC<PinModalProps> = ({ judgeName, onVerify, onClose }) => 
   }, [pin]);
 
   return (
-    <div className="modal-overlay fade-in" style={{ 
+    <div className="modal-overlay" style={{ 
       position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, 
-      background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(12px)',
+      background: 'radial-gradient(circle at center, rgba(30, 27, 75, 0.4) 0%, rgba(15, 23, 42, 0.95) 100%)',
+      backdropFilter: 'blur(20px) saturate(120%)',
       display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000,
       padding: '1rem'
     }}>
-      <div className="glass-card invite-card" style={{ 
-        width: '100%', maxWidth: '400px', padding: '2.5rem', textAlign: 'center',
-        position: 'relative', border: '1px solid rgba(255, 255, 255, 0.1)',
-        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8)'
+      <div className={`glass-card-premium modal-entrance ${isShake ? 'shake' : ''}`} style={{ 
+        width: '100%', maxWidth: '420px', padding: '3rem 2.5rem', textAlign: 'center',
+        position: 'relative', borderRadius: '28px'
       }}>
         <button 
           onClick={onClose}
-          style={{ position: 'absolute', top: '1.2rem', right: '1.2rem', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+          style={{ 
+            position: 'absolute', top: '1.5rem', right: '1.5rem', 
+            background: 'rgba(255,255,255,0.05)', border: 'none', color: 'var(--text-muted)', 
+            cursor: 'pointer', borderRadius: '50%', width: '36px', height: '36px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'all 0.2s'
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = 'var(--text)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
         >
-          <X size={24} />
+          <X size={20} />
         </button>
 
-        <div style={{ marginBottom: '2rem' }}>
+        <div style={{ marginBottom: '2.5rem' }}>
           <div style={{ 
-            width: '60px', height: '60px', margin: '0 auto 1.2rem',
-            background: 'rgba(124, 58, 237, 0.1)', borderRadius: '18px',
-            display: 'flex', alignItems: 'center', justifyContent: 'center'
+            width: '70px', height: '70px', margin: '0 auto 1.5rem',
+            background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(168, 85, 247, 0.2))', 
+            borderRadius: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 0 20px rgba(99, 102, 241, 0.2)',
+            border: '1px solid rgba(255, 255, 255, 0.1)'
           }}>
-            <Lock size={28} color="var(--primary)" />
+            <Lock size={32} color="var(--primary)" />
           </div>
-          <h2 style={{ fontSize: '1.6rem', marginBottom: '0.5rem' }}>{judgeName} 심사위원</h2>
+          <h2 style={{ fontSize: '1.8rem', marginBottom: '0.6rem', letterSpacing: '-0.5px' }}>{judgeName} 심사위원</h2>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>인증을 위한 6자리 PIN을 입력하세요.</p>
         </div>
 
-        <form onSubmit={handleSubmit}>
-          <div style={{ position: 'relative', marginBottom: '1.5rem' }}>
-            {/* 시각적 핀 표시 (마스킹) */}
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '0.8rem', marginBottom: '1rem' }}>
-              {[...Array(6)].map((_, i) => (
-                <div key={i} style={{ 
-                  width: '45px', height: '55px', borderBottom: `3px solid ${i < pin.length ? 'var(--primary)' : 'rgba(255,255,255,0.1)'}`,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem',
-                  color: 'var(--primary)', fontWeight: 'bold', transition: 'all 0.2s'
-                }}>
-                  {i < pin.length ? <Asterisk size={20} /> : ''}
-                </div>
-              ))}
+        <form onSubmit={handleSubmit} style={{ position: 'relative' }}>
+          <div 
+            onClick={() => inputRef.current?.focus()}
+            style={{ cursor: 'text', marginBottom: '2rem' }}
+          >
+            {/* 시각적 핀 박스 */}
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '0.8rem' }}>
+              {[...Array(6)].map((_, i) => {
+                const isActive = i === pin.length;
+                const isFilled = i < pin.length;
+                
+                return (
+                  <div key={i} style={{ 
+                    width: '50px', height: '65px', borderRadius: '14px',
+                    border: `2px solid ${isActive ? 'var(--primary)' : (isFilled ? 'rgba(99, 102, 241, 0.3)' : 'rgba(255, 255, 255, 0.08)')}`,
+                    background: isActive ? 'rgba(99, 102, 241, 0.08)' : (isFilled ? 'rgba(99, 102, 241, 0.03)' : 'rgba(255, 255, 255, 0.02)'),
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    transition: 'all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+                    boxShadow: isActive ? '0 0 20px var(--primary-glow)' : 'none',
+                    transform: isFilled ? 'scale(1.05)' : 'scale(1)',
+                    position: 'relative',
+                    overflow: 'hidden'
+                  }}>
+                    {isFilled ? (
+                      <div className="fade-in" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: 'var(--primary)', boxShadow: '0 0 8px var(--primary)' }} />
+                      </div>
+                    ) : (
+                      isActive && <div className="cursor-blink" style={{ width: '2px', height: '24px', backgroundColor: 'var(--primary)', boxShadow: '0 0 8px var(--primary)' }} />
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
             <input 
@@ -96,8 +137,9 @@ const PinModal: React.FC<PinModalProps> = ({ judgeName, onVerify, onClose }) => 
               inputMode="numeric"
               pattern="[0-9]*"
               maxLength={6}
+              autoFocus
               style={{ 
-                position: 'absolute', top: 0, left: 0, opacity: 0, width: '100%', height: '100%', cursor: 'default'
+                position: 'absolute', opacity: 0, width: '1px', height: '1px'
               }}
               value={pin}
               onChange={(e) => setPin(e.target.value.replace(/[^0-9]/g, ''))}
@@ -106,10 +148,11 @@ const PinModal: React.FC<PinModalProps> = ({ judgeName, onVerify, onClose }) => 
           </div>
 
           {error && (
-            <div className="fade-in" style={{ 
-              padding: '0.8rem', background: 'rgba(244, 63, 94, 0.1)', 
-              borderRadius: '8px', color: '#fb7185', fontSize: '0.85rem', marginBottom: '1.5rem',
-              display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem'
+            <div className="shake" style={{ 
+              padding: '0.8rem', background: 'rgba(244, 63, 94, 0.08)', 
+              borderRadius: '12px', color: '#fb7185', fontSize: '0.85rem', marginBottom: '2rem',
+              display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem',
+              border: '1px solid rgba(244, 63, 94, 0.1)'
             }}>
               <span>{error}</span>
             </div>
@@ -118,16 +161,21 @@ const PinModal: React.FC<PinModalProps> = ({ judgeName, onVerify, onClose }) => 
           <button 
             type="submit" 
             className="premium-button" 
-            style={{ width: '100%', height: '50px' }}
+            style={{ width: '100%', height: '56px', borderRadius: '16px', fontSize: '1rem' }}
             disabled={isLoading || pin.length !== 6}
           >
-            {isLoading ? <Loader2 size={22} className="animate-spin" style={{ margin: '0 auto' }} /> : '접속하기'}
+            {isLoading ? <Loader2 size={24} className="animate-spin" style={{ margin: '0 auto' }} /> : '접속하기'}
           </button>
         </form>
 
-        <div style={{ marginTop: '2rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', color: 'rgba(255,255,255,0.2)' }}>
-          <ShieldCheck size={14} />
-          <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Security Protected</span>
+        <div style={{ 
+          marginTop: '2.5rem', padding: '1rem', borderRadius: '16px',
+          background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.03)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem', 
+          color: 'rgba(255,255,255,0.25)' 
+        }}>
+          <ShieldCheck size={16} />
+          <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1.5px', fontWeight: 600 }}>Security Protected</span>
         </div>
       </div>
     </div>

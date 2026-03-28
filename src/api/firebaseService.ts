@@ -54,7 +54,15 @@ export const firebaseService = {
   async createAudition(name: string) {
     return await addDoc(collection(db, 'auditions'), {
       name,
+      status: 'active',
       createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    });
+  },
+
+  async updateAuditionStatus(id: string, status: 'active' | 'archived') {
+    return await updateDoc(doc(db, 'auditions', id), {
+      status,
       updatedAt: serverTimestamp()
     });
   },

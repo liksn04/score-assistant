@@ -34,6 +34,7 @@ export interface Comment {
 export interface Audition {
   id: string;
   name: string;
+  status: 'active' | 'archived';
   createdAt: any;
   updatedAt: any;
 }

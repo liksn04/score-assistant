@@ -38,10 +38,16 @@ export const useAuditions = () => {
     const q = query(collection(db, 'auditions'), orderBy('createdAt', 'desc'));
     
     const unsubscribe = onSnapshot(q, async (snapshot) => {
-      const data = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Audition[];
+      const data = snapshot.docs.map(doc => {
+        const d = doc.data();
+        return {
+          id: doc.id,
+          name: d.name,
+          status: d.status || 'active', // 기존 데이터 호환성
+          createdAt: d.createdAt,
+          updatedAt: d.updatedAt
+        };
+      }) as Audition[];
       
       setAuditions(data);
       

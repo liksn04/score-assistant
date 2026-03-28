@@ -22,9 +22,10 @@ interface CandidateScoreCardProps {
   isCommentExpanded: boolean;
   onToggleComment: (id: string) => void;
   onCommentInputChange: (id: string, value: string) => void;
-  addComment: (id: string) => void;
-  deleteComment: (id: string, comment: any) => void;
+  onAddComment: (id: string) => void;
+  onDeleteComment: (id: string, comment: any) => void;
   onToggleCompletion: (id: string, currentStatus: boolean) => void;
+  isReadOnly?: boolean;
 }
 
 const CandidateScoreCard: React.FC<CandidateScoreCardProps> = ({
@@ -45,9 +46,10 @@ const CandidateScoreCard: React.FC<CandidateScoreCardProps> = ({
   isCommentExpanded,
   onToggleComment,
   onCommentInputChange,
-  addComment,
-  deleteComment,
-  onToggleCompletion
+  onAddComment,
+  onDeleteComment,
+  onToggleCompletion,
+  isReadOnly = false
 }) => {
   const isCompleted = candidate.scores[selectedJudge]?.isCompleted || false;
 
@@ -98,7 +100,7 @@ const CandidateScoreCard: React.FC<CandidateScoreCardProps> = ({
                   setTempSongTitle(candidate.song || '');
                 }}
               >
-                🎵 {candidate.song || (isObserver ? '곡 정보 없음' : '곡명 미입력')}
+                🎵 {candidate.song || (isObserver || isReadOnly ? '곡 정보 없음' : '곡명 미입력')}
               </span>
             )}
           </div>
@@ -110,7 +112,7 @@ const CandidateScoreCard: React.FC<CandidateScoreCardProps> = ({
               {isObserver ? candidate.average : getJudgeTotal(candidate, selectedJudge)}
             </strong>/100
           </span>
-          {!isObserver && (
+          {!isObserver && !isReadOnly && (
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <button 
                 onClick={() => onToggleCompletion(candidate.id, isCompleted)} 
@@ -136,6 +138,11 @@ const CandidateScoreCard: React.FC<CandidateScoreCardProps> = ({
               </button>
             </div>
           )}
+          {isReadOnly && !isObserver && (
+            <div className="bg-amber-500/10 text-amber-500 px-2 py-1 rounded-md text-[10px] uppercase font-bold tracking-wider">
+              Archived
+            </div>
+          )}
         </div>
       </div>
 
@@ -154,29 +161,39 @@ const CandidateScoreCard: React.FC<CandidateScoreCardProps> = ({
                 max="100"
                 value={candidate.scores[selectedJudge]?.simpleTotal ?? ''}
                 onChange={(e) => updateSimpleScore(candidate.id, e.target.value)}
+                disabled={isReadOnly}
               />
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <button 
-                onClick={() => updateItemStrikes(candidate.id, 'simple', 1)}
-                style={{ background: 'rgba(244, 63, 94, 0.1)', border: '1px solid rgba(244, 63, 94, 0.2)', color: '#f43f5e', borderRadius: '8px', padding: '4px 8px', display: 'flex', alignItems: 'center', cursor: 'pointer' }}
-              >
-                <X size={14} /> <span style={{ fontSize: '0.8rem', marginLeft: '2px' }}>X 추가</span>
-              </button>
+            {!isReadOnly && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <button 
+                  onClick={() => updateItemStrikes(candidate.id, 'simple', 1)}
+                  style={{ background: 'rgba(244, 63, 94, 0.1)', border: '1px solid rgba(244, 63, 94, 0.2)', color: '#f43f5e', borderRadius: '8px', padding: '4px 8px', display: 'flex', alignItems: 'center', cursor: 'pointer' }}
+                >
+                  <X size={14} /> <span style={{ fontSize: '0.8rem', marginLeft: '2px' }}>X 추가</span>
+                </button>
+                <div style={{ display: 'flex', gap: '2px' }}>
+                  {Array.from({ length: candidate.scores[selectedJudge]?.itemStrikes?.['simple'] || 0 }).map((_: any, i: number) => (
+                    <X key={i} size={16} color="#f43f5e" strokeWidth={3} />
+                  ))}
+                </div>
+                {(candidate.scores[selectedJudge]?.itemStrikes?.['simple'] || 0) > 0 && (
+                  <button 
+                    onClick={() => updateItemStrikes(candidate.id, 'simple', -1)}
+                    style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.7rem' }}
+                  >
+                    취소
+                  </button>
+                )}
+              </div>
+            )}
+            {isReadOnly && (candidate.scores[selectedJudge]?.itemStrikes?.['simple'] || 0) > 0 && (
               <div style={{ display: 'flex', gap: '2px' }}>
                 {Array.from({ length: candidate.scores[selectedJudge]?.itemStrikes?.['simple'] || 0 }).map((_: any, i: number) => (
                   <X key={i} size={16} color="#f43f5e" strokeWidth={3} />
                 ))}
               </div>
-              {(candidate.scores[selectedJudge]?.itemStrikes?.['simple'] || 0) > 0 && (
-                <button 
-                  onClick={() => updateItemStrikes(candidate.id, 'simple', -1)}
-                  style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.7rem' }}
-                >
-                  취소
-                </button>
-              )}
-            </div>
+            )}
           </div>
         ) : (
           <div className="scoring-grid">
@@ -184,11 +201,22 @@ const CandidateScoreCard: React.FC<CandidateScoreCardProps> = ({
               <div key={item} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255, 255, 255, 0.02)', padding: '0.8rem', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.03)' }}>
                 <label style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', flex: 1 }}>{item} ({JUDGE_SCORE_LIMITS[selectedJudge][item]})</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                  <input type="number" className="premium-input score-input" style={{ width: '60px', padding: '6px', textAlign: 'center', fontSize: '0.9rem' }} min="0" max={JUDGE_SCORE_LIMITS[selectedJudge][item]} value={candidate.scores[selectedJudge]?.[item] ?? ''} onChange={(e) => updateDetailScore(candidate.id, item, e.target.value)} />
+                  <input 
+                    type="number" 
+                    className="premium-input score-input" 
+                    style={{ width: '60px', padding: '6px', textAlign: 'center', fontSize: '0.9rem' }} 
+                    min="0" 
+                    max={JUDGE_SCORE_LIMITS[selectedJudge][item]} 
+                    value={candidate.scores[selectedJudge]?.[item] ?? ''} 
+                    onChange={(e) => updateDetailScore(candidate.id, item, e.target.value)} 
+                    disabled={isReadOnly}
+                  />
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                    <button onClick={() => updateItemStrikes(candidate.id, item, 1)} style={{ background: 'rgba(244, 63, 94, 0.15)', border: '1px solid rgba(244, 63, 94, 0.2)', color: '#f43f5e', borderRadius: '6px', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={14} strokeWidth={3} /></button>
+                    {!isReadOnly && (
+                      <button onClick={() => updateItemStrikes(candidate.id, item, 1)} style={{ background: 'rgba(244, 63, 94, 0.15)', border: '1px solid rgba(244, 63, 94, 0.2)', color: '#f43f5e', borderRadius: '6px', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={14} strokeWidth={3} /></button>
+                    )}
                     <div style={{ display: 'flex', gap: '1px' }}>{Array.from({ length: candidate.scores[selectedJudge]?.itemStrikes?.[item] || 0 }).map((_: any, i: number) => (<X key={i} size={14} color="#f43f5e" strokeWidth={3} />))}</div>
-                    {(candidate.scores[selectedJudge]?.itemStrikes?.[item] || 0) > 0 && (<button onClick={() => updateItemStrikes(candidate.id, item, -1)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.65rem' }}>-</button>)}
+                    {!isReadOnly && (candidate.scores[selectedJudge]?.itemStrikes?.[item] || 0) > 0 && (<button onClick={() => updateItemStrikes(candidate.id, item, -1)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.65rem' }}>-</button>)}
                   </div>
                 </div>
               </div>
@@ -205,8 +233,8 @@ const CandidateScoreCard: React.FC<CandidateScoreCardProps> = ({
         isExpanded={isCommentExpanded}
         onToggleExpand={onToggleComment}
         onInputChange={onCommentInputChange}
-        onAddComment={addComment}
-        onDeleteComment={deleteComment}
+        onAddComment={onAddComment}
+        onDeleteComment={onDeleteComment}
       />
 
     </div>

@@ -172,7 +172,7 @@ const App: React.FC = () => {
                 <div>
                   <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>심사 완료 항목</p>
                   <h3 style={{ fontSize: '1.5rem' }}>
-                    {candidates.reduce((acc, curr) => acc + Object.values(curr.scores).filter(s => s.isCompleted).length, 0)}건
+                  {candidates.filter(c => Object.values(c.scores).some(s => s.isCompleted)).length}건
                   </h3>
                 </div>
               </div>

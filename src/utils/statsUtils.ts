@@ -1,5 +1,5 @@
 import type { Candidate, JudgeName } from '../types';
-import { JUDGES, SIMPLE_JUDGES } from '../types';
+import { JUDGES, SIMPLE_JUDGES, EVALUATION_ITEMS } from '../types';
 
 export interface JudgeStats {
   judgeName: JudgeName;
@@ -15,6 +15,18 @@ export interface CandidateStats {
   spread: number; // 최고점 - 최저점
 }
 
+/**
+ * 특정 심사위원이 특정 참가자에게 부여한 합계 점수를 계산합니다.
+ */
+export const getJudgeScore = (candidate: Candidate, judge: JudgeName) => {
+  const s = candidate.scores[judge];
+  if (!s || !s.isCompleted) return null;
+  if (SIMPLE_JUDGES.includes(judge)) return s.simpleTotal || 0;
+  
+  // 상세 심사위원은 각 항목의 합계를 계산
+  return EVALUATION_ITEMS.reduce((sum: number, item) => sum + (Number((s as any)[item]) || 0), 0);
+};
+
 export const calculateStats = (candidates: Candidate[]) => {
   if (candidates.length === 0) return null;
 
@@ -23,15 +35,7 @@ export const calculateStats = (candidates: Candidate[]) => {
     .filter(judge => judge !== '참관자')
     .map(judge => {
       const scores = candidates
-        .map(c => {
-          const s = c.scores[judge];
-          if (!s || !s.isCompleted) return null;
-          if (SIMPLE_JUDGES.includes(judge)) return s.simpleTotal || 0;
-          // 상세 심사위원은 총점 계산
-          return Object.entries(s)
-            .filter(([key]) => !['isCompleted', 'simpleTotal', 'itemStrikes', 'strikes'].includes(key))
-            .reduce((sum, [_, val]) => sum + (Number(val) || 0), 0);
-        })
+        .map(c => getJudgeScore(c, judge))
         .filter((s): s is number => s !== null);
 
       const average = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
@@ -45,14 +49,10 @@ export const calculateStats = (candidates: Candidate[]) => {
 
   // 2. 후보자별 심사위원 간 편차
   const candidateStats = candidates.map(c => {
-    const judgeScores = JUDGES.map(j => {
-      const s = c.scores[j];
-      if (!s || !s.isCompleted) return null;
-      if (SIMPLE_JUDGES.includes(j)) return s.simpleTotal || 0;
-      return Object.entries(s)
-        .filter(([key]) => !['isCompleted', 'simpleTotal', 'itemStrikes', 'strikes'].includes(key))
-        .reduce((sum, [_, val]) => sum + (Number(val) || 0), 0);
-    }).filter((s): s is number => s !== null);
+    const judgeScores = JUDGES
+      .filter(j => j !== '참관자')
+      .map(j => getJudgeScore(c, j))
+      .filter((s): s is number => s !== null);
 
     if (judgeScores.length < 2) return { id: c.id, name: c.name, std: 0, spread: 0 };
 

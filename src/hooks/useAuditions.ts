@@ -43,7 +43,8 @@ export const useAuditions = () => {
         return {
           id: doc.id,
           name: d.name,
-          status: d.status || 'active', // 기존 데이터 호환성
+          status: d.status || 'active',
+          activeJudges: d.activeJudges || [],
           createdAt: d.createdAt,
           updatedAt: d.updatedAt
         };

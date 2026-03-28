@@ -20,7 +20,10 @@ const App: React.FC = () => {
 
   const { judgeRole, isLoadingAuth, loginWithPin, logout } = useAuth();
   const { auditions, activeAuditionId, setActiveAuditionId, isLoading: isAuditionLoading } = useAuditions();
-  const { candidates, sortedCandidates, isLoading: isCandidatesLoading } = useCandidates(activeAuditionId);
+  const activeAudition = auditions.find(a => a.id === activeAuditionId);
+  const activeJudges = activeAudition?.activeJudges || [];
+  
+  const { candidates, sortedCandidates, isLoading: isCandidatesLoading } = useCandidates(activeAuditionId, activeJudges);
   
   const {
     selectedJudge: currentJudge, setSelectedJudge, isObserver,
@@ -36,7 +39,6 @@ const App: React.FC = () => {
     toggleCompletion
   } = useJudgeActions(candidates, activeAuditionId);
 
-  const activeAudition = (auditions as any[]).find(a => a.id === activeAuditionId);
   const isArchived = activeAudition?.status === 'archived';
 
   // 인증된 역할이 있으면 자동으로 심사위원 설정
@@ -403,11 +405,47 @@ const App: React.FC = () => {
               </div>
             </section>
 
-            <Leaderboard sortedCandidates={sortedCandidates} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div className="glass-card" style={{ padding: '1rem', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.8rem', fontWeight: 500 }}>리더보드 반영 심사위원 선택</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.8rem' }}>
+                  {JUDGES.filter(j => j !== '참관자').map(j => {
+                    const isActive = activeJudges.includes(j);
+                    return (
+                      <button 
+                        key={j}
+                        onClick={() => {
+                          if (!activeAuditionId) return;
+                          const newActive = isActive 
+                            ? activeJudges.filter(aj => aj !== j)
+                            : [...activeJudges, j];
+                          firebaseService.updateActiveJudges(activeAuditionId, newActive);
+                        }}
+                        style={{
+                          padding: '0.5rem 1rem',
+                          borderRadius: '10px',
+                          fontSize: '0.85rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          transition: 'all 0.2s',
+                          border: '1px solid',
+                          borderColor: isActive ? 'var(--primary)' : 'rgba(255,255,255,0.1)',
+                          background: isActive ? 'rgba(99, 102, 241, 0.1)' : 'rgba(255,255,255,0.05)',
+                          color: isActive ? 'var(--primary)' : 'var(--text-muted)',
+                        }}
+                      >
+                        {j} {isActive ? 'ON' : 'OFF'}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <Leaderboard sortedCandidates={sortedCandidates} />
+            </div>
           </div>
 
           <div style={{ marginTop: '3rem' }}>
-            <StatisticsPanel candidates={candidates} activeAudition={activeAudition} />
+            <StatisticsPanel candidates={candidates} activeAudition={activeAudition || null} />
           </div>
         </div>
       )}

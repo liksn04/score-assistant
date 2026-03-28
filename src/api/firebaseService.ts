@@ -52,9 +52,11 @@ const calculateTotalAndAverage = (scores: Record<string, any>) => {
 export const firebaseService = {
   // 오디션 관리
   async createAudition(name: string) {
+    const defaultActiveJudges = JUDGES.filter(j => j !== '참관자');
     return await addDoc(collection(db, 'auditions'), {
       name,
       status: 'active',
+      activeJudges: defaultActiveJudges,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     });
@@ -70,6 +72,13 @@ export const firebaseService = {
   async updateAuditionName(id: string, name: string) {
     return await updateDoc(doc(db, 'auditions', id), {
       name,
+      updatedAt: serverTimestamp()
+    });
+  },
+
+  async updateActiveJudges(id: string, judges: JudgeName[]) {
+    return await updateDoc(doc(db, 'auditions', id), {
+      activeJudges: judges,
       updatedAt: serverTimestamp()
     });
   },

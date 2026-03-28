@@ -35,6 +35,7 @@ export interface Audition {
   id: string;
   name: string;
   status: 'active' | 'archived';
+  activeJudges?: JudgeName[]; // 리더보드에 반영할 활성 심사위원 목록
   createdAt: any;
   updatedAt: any;
 }

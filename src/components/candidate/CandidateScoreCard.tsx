@@ -1,6 +1,6 @@
 import React from 'react';
 import { X, Trash2, CheckCircle2, RotateCcw } from 'lucide-react';
-import type { Candidate, Audition } from '../../types';
+import type { Candidate, Audition, Comment } from '../../types';
 import CommentSection from './CommentSection';
 
 interface CandidateScoreCardProps {
@@ -23,9 +23,10 @@ interface CandidateScoreCardProps {
   onToggleComment: (id: string) => void;
   onCommentInputChange: (id: string, value: string) => void;
   onAddComment: (id: string) => void;
-  onDeleteComment: (id: string, comment: any) => void;
+  onDeleteComment: (id: string, comment: Comment) => void;
   onToggleCompletion: (id: string, currentStatus: boolean) => void;
   isReadOnly?: boolean;
+  readOnlyLabel?: string;
 }
 
 const CandidateScoreCard: React.FC<CandidateScoreCardProps> = ({
@@ -50,7 +51,8 @@ const CandidateScoreCard: React.FC<CandidateScoreCardProps> = ({
   onAddComment,
   onDeleteComment,
   onToggleCompletion,
-  isReadOnly = false
+  isReadOnly = false,
+  readOnlyLabel = 'Locked',
 }) => {
   const isCompleted = candidate.scores[selectedJudge]?.isCompleted || false;
   const judgeConfig = activeAudition.judges.find(j => j.name === selectedJudge);
@@ -149,7 +151,7 @@ const CandidateScoreCard: React.FC<CandidateScoreCardProps> = ({
           )}
           {isReadOnly && !isObserver && (
             <div className="bg-amber-500/10 text-amber-500 px-2 py-1 rounded-md text-[10px] uppercase font-bold tracking-wider">
-              Archived
+              {readOnlyLabel}
             </div>
           )}
         </div>
@@ -182,7 +184,7 @@ const CandidateScoreCard: React.FC<CandidateScoreCardProps> = ({
                   <X size={14} /> <span style={{ fontSize: '0.8rem', marginLeft: '2px' }}>X 추가</span>
                 </button>
                 <div style={{ display: 'flex', gap: '2px' }}>
-                  {Array.from({ length: candidate.scores[selectedJudge]?.itemStrikes?.['simple'] || 0 }).map((_: any, i: number) => (
+                  {Array.from({ length: candidate.scores[selectedJudge]?.itemStrikes?.['simple'] || 0 }).map((_, i: number) => (
                     <X key={i} size={16} color="#f43f5e" strokeWidth={3} />
                   ))}
                 </div>
@@ -198,7 +200,7 @@ const CandidateScoreCard: React.FC<CandidateScoreCardProps> = ({
             )}
             {isReadOnly && (candidate.scores[selectedJudge]?.itemStrikes?.['simple'] || 0) > 0 && (
               <div style={{ display: 'flex', gap: '2px' }}>
-                {Array.from({ length: candidate.scores[selectedJudge]?.itemStrikes?.['simple'] || 0 }).map((_: any, i: number) => (
+                {Array.from({ length: candidate.scores[selectedJudge]?.itemStrikes?.['simple'] || 0 }).map((_, i: number) => (
                   <X key={i} size={16} color="#f43f5e" strokeWidth={3} />
                 ))}
               </div>
@@ -216,7 +218,7 @@ const CandidateScoreCard: React.FC<CandidateScoreCardProps> = ({
                     style={{ width: '60px', padding: '6px', textAlign: 'center', fontSize: '0.9rem' }} 
                     min="0" 
                     max={criterion.maxScore} 
-                    value={candidate.scores[selectedJudge]?.[criterion.item] ?? ''} 
+                    value={typeof candidate.scores[selectedJudge]?.[criterion.item] === 'number' ? Number(candidate.scores[selectedJudge]?.[criterion.item]) : ''} 
                     onChange={(e) => updateDetailScore(candidate.id, criterion.item, e.target.value)} 
                     disabled={isReadOnly}
                   />
@@ -224,7 +226,7 @@ const CandidateScoreCard: React.FC<CandidateScoreCardProps> = ({
                     {!isReadOnly && (
                       <button onClick={() => updateItemStrikes(candidate.id, criterion.item, 1)} style={{ background: 'rgba(244, 63, 94, 0.15)', border: '1px solid rgba(244, 63, 94, 0.2)', color: '#f43f5e', borderRadius: '6px', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={14} strokeWidth={3} /></button>
                     )}
-                    <div style={{ display: 'flex', gap: '1px' }}>{Array.from({ length: candidate.scores[selectedJudge]?.itemStrikes?.[criterion.item] || 0 }).map((_: any, i: number) => (<X key={i} size={14} color="#f43f5e" strokeWidth={3} />))}</div>
+                    <div style={{ display: 'flex', gap: '1px' }}>{Array.from({ length: candidate.scores[selectedJudge]?.itemStrikes?.[criterion.item] || 0 }).map((_, i: number) => (<X key={i} size={14} color="#f43f5e" strokeWidth={3} />))}</div>
                     {!isReadOnly && (candidate.scores[selectedJudge]?.itemStrikes?.[criterion.item] || 0) > 0 && (<button onClick={() => updateItemStrikes(candidate.id, criterion.item, -1)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.65rem' }}>-</button>)}
                   </div>
                 </div>
@@ -244,6 +246,7 @@ const CandidateScoreCard: React.FC<CandidateScoreCardProps> = ({
         onInputChange={onCommentInputChange}
         onAddComment={onAddComment}
         onDeleteComment={onDeleteComment}
+        isReadOnly={isObserver || isReadOnly}
       />
     </div>
   );

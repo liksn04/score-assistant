@@ -1,139 +1,402 @@
 import { useState } from 'react';
 import { firebaseService } from '../api/firebaseService';
-import type { Candidate, Audition } from '../types';
+import type { Candidate, Comment, Audition, PendingMutationState } from '../types';
+import { useConfirmDialog } from '../context/ConfirmDialogContext.tsx';
+import { useToast } from '../context/ToastContext.tsx';
+import { canEditCandidateScore } from '../utils/rankingUtils.ts';
 
-export const useJudgeActions = (candidates: Candidate[], audition: Audition | null) => {
-  const [selectedJudge, setSelectedJudge] = useState<string | null>(null);
-  
-  const judgeConfig = audition?.judges?.find(j => j.name === selectedJudge);
-  const isObserver = judgeConfig?.type === 'observer';
-  
+const COMMENT_MAX_LENGTH = 500;
+
+export const useJudgeActions = (candidates: Candidate[], audition: Audition | null, selectedJudge: string | null) => {
   const [newCandidateName, setNewCandidateName] = useState('');
   const [newSongTitle, setNewSongTitle] = useState('');
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
   const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({});
   const [editingSongId, setEditingSongId] = useState<string | null>(null);
   const [tempSongTitle, setTempSongTitle] = useState('');
+  const [pendingMutation, setPendingMutation] = useState<PendingMutationState>({ key: null, label: null });
 
-  // 참가자 추가
-  const addCandidate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newCandidateName.trim() || !audition) return;
+  const { confirm } = useConfirmDialog();
+  const { showToast, updateToast } = useToast();
+
+  const judgeConfig = audition?.judges?.find((judge) => judge.name === selectedJudge);
+  const isObserver = judgeConfig?.type === 'observer';
+
+  const withToast = async <T,>(
+    key: string,
+    title: string,
+    runner: () => Promise<T>,
+    successMessage: string,
+  ) => {
+    const toastId = showToast({
+      kind: 'loading',
+      title,
+      message: `${title}을 처리하고 있습니다.`,
+      dedupeKey: key,
+    });
+
+    setPendingMutation({
+      key,
+      label: title,
+    });
+
     try {
-      await firebaseService.addCandidate(newCandidateName, newSongTitle, audition);
-      setNewCandidateName('');
-      setNewSongTitle('');
+      const result = await runner();
+      updateToast(toastId, {
+        kind: 'success',
+        title: `${title} 완료`,
+        message: successMessage,
+      });
+      return result;
     } catch (error) {
-      alert("참가자 추가 중 오류가 발생했습니다.");
+      updateToast(toastId, {
+        kind: 'error',
+        title: `${title} 실패`,
+        message: error instanceof Error ? error.message : `${title} 중 오류가 발생했습니다.`,
+      });
+      throw error;
+    } finally {
+      setPendingMutation({
+        key: null,
+        label: null,
+      });
     }
   };
 
-  // 단순 점수 업데이트
-  const updateSimpleScore = async (candidateId: string, scoreStr: string) => {
-    if (!selectedJudge || !audition) return;
-    let score: number | null = scoreStr.trim() === "" ? null : parseInt(scoreStr);
-    if (score !== null && (isNaN(score) || score < 0 || score > 100)) {
-       alert("0에서 100 사이의 숫자를 입력해주세요.");
-       return;
+  const getCandidate = (candidateId: string) => candidates.find((candidate) => candidate.id === candidateId) ?? null;
+
+  const isCandidateReadOnly = (candidateId: string) => {
+    if (!audition) {
+      return true;
     }
-    const candidate = candidates.find(c => c.id === candidateId);
-    if (!candidate) return;
-    try {
-      await firebaseService.updateSimpleScore(candidate, selectedJudge, score, audition);
-    } catch (error) {
-      console.error("단순 점수 업데이트 오류:", error);
+
+    if (audition.status === 'archived') {
+      return true;
     }
+
+    return !canEditCandidateScore(audition, candidateId);
   };
 
-  // 세부 점수 업데이트
-  const updateDetailScore = async (candidateId: string, item: string, scoreStr: string) => {
-    if (!selectedJudge || !audition || !judgeConfig) return;
-    let score: number | null = scoreStr.trim() === "" ? null : parseInt(scoreStr);
-    const criterion = judgeConfig.criteria?.find(c => c.item === item);
-    const maxScore = criterion ? criterion.maxScore : 100;
+  const addCandidate = async (event: React.FormEvent) => {
+    event.preventDefault();
 
-    if (score !== null && (isNaN(score) || score < 0 || score > maxScore)) {
-      alert(`0에서 ${maxScore} 사이의 숫자를 입력해주세요. (${item} 항목 한도: ${maxScore}점)`);
+    if (!audition) {
       return;
     }
-    const candidate = candidates.find(c => c.id === candidateId);
-    if (!candidate) return;
-    try {
-      await firebaseService.updateDetailScore(candidate, selectedJudge, item, score, audition);
-    } catch (error) {
-      console.error("점수 업데이트 오류:", error);
+
+    const trimmedName = newCandidateName.trim();
+    const trimmedSong = newSongTitle.trim();
+
+    // Edge case 방어: 빈 팀명, 같은 오디션 내 중복 팀명, 확정된 오디션 추가 시도를 사전에 차단합니다.
+    if (!trimmedName) {
+      showToast({
+        kind: 'warning',
+        title: '팀명을 확인해 주세요',
+        message: '팀명은 비워둘 수 없습니다.',
+      });
+      return;
     }
+
+    if (candidates.some((candidate) => candidate.name.trim() === trimmedName)) {
+      showToast({
+        kind: 'warning',
+        title: '중복 팀명',
+        message: '같은 이름의 팀이 이미 등록되어 있습니다.',
+      });
+      return;
+    }
+
+    await withToast(
+      'candidate-create',
+      '팀 등록',
+      async () => {
+        await firebaseService.addCandidate(trimmedName, trimmedSong, audition);
+        setNewCandidateName('');
+        setNewSongTitle('');
+      },
+      '새 참가팀을 등록했습니다.',
+    );
   };
 
-  // 코멘트 관리
+  const updateSimpleScore = async (candidateId: string, scoreStr: string) => {
+    if (!selectedJudge || !audition) {
+      return;
+    }
+
+    if (isCandidateReadOnly(candidateId)) {
+      showToast({
+        kind: 'warning',
+        title: '수정 잠금 상태',
+        message: '확정된 결과는 잠금 해제된 팀만 수정할 수 있습니다.',
+      });
+      return;
+    }
+
+    const score = scoreStr.trim() === '' ? null : Number.parseInt(scoreStr, 10);
+    if (score !== null && (Number.isNaN(score) || score < 0 || score > 100)) {
+      showToast({
+        kind: 'warning',
+        title: '점수 범위 오류',
+        message: '0에서 100 사이의 숫자를 입력해 주세요.',
+      });
+      return;
+    }
+
+    const candidate = getCandidate(candidateId);
+    if (!candidate) {
+      return;
+    }
+
+    await withToast(
+      `score-simple-${candidateId}`,
+      '점수 저장',
+      () => firebaseService.updateSimpleScore(candidate, selectedJudge, score, audition),
+      `${candidate.name} 팀의 총점을 저장했습니다.`,
+    );
+  };
+
+  const updateDetailScore = async (candidateId: string, item: string, scoreStr: string) => {
+    if (!selectedJudge || !audition || !judgeConfig) {
+      return;
+    }
+
+    if (isCandidateReadOnly(candidateId)) {
+      showToast({
+        kind: 'warning',
+        title: '수정 잠금 상태',
+        message: '확정된 결과는 잠금 해제된 팀만 수정할 수 있습니다.',
+      });
+      return;
+    }
+
+    const score = scoreStr.trim() === '' ? null : Number.parseInt(scoreStr, 10);
+    const criterion = judgeConfig.criteria?.find((candidateCriterion) => candidateCriterion.item === item);
+    const maxScore = criterion?.maxScore ?? 100;
+
+    if (score !== null && (Number.isNaN(score) || score < 0 || score > maxScore)) {
+      showToast({
+        kind: 'warning',
+        title: '점수 범위 오류',
+        message: `0에서 ${maxScore} 사이의 숫자를 입력해 주세요.`,
+      });
+      return;
+    }
+
+    const candidate = getCandidate(candidateId);
+    if (!candidate) {
+      return;
+    }
+
+    await withToast(
+      `score-detail-${candidateId}-${item}`,
+      '점수 저장',
+      () => firebaseService.updateDetailScore(candidate, selectedJudge, item, score, audition),
+      `${candidate.name} 팀의 ${item} 점수를 저장했습니다.`,
+    );
+  };
+
   const addComment = async (candidateId: string) => {
-    if (!selectedJudge || !commentInputs[candidateId]?.trim()) return;
-    try {
-      await firebaseService.addComment(candidateId, selectedJudge, commentInputs[candidateId]);
-      setCommentInputs(prev => ({ ...prev, [candidateId]: '' }));
-    } catch (error) {
-      console.error("코멘트 추가 오류:", error);
-      alert("코멘트 추가 중 오류가 발생했습니다.");
+    if (!selectedJudge || !audition) {
+      return;
     }
+
+    const content = commentInputs[candidateId]?.trim() ?? '';
+    if (!content) {
+      return;
+    }
+
+    // Edge case 방어: 빈 입력, 과도하게 긴 코멘트, 잠긴 팀에 대한 후기 수정 시도를 막습니다.
+    if (content.length > COMMENT_MAX_LENGTH) {
+      showToast({
+        kind: 'warning',
+        title: '코멘트 길이 초과',
+        message: `코멘트는 ${COMMENT_MAX_LENGTH}자 이하로 입력해 주세요.`,
+      });
+      return;
+    }
+
+    const candidate = getCandidate(candidateId);
+    if (!candidate) {
+      return;
+    }
+
+    await withToast(
+      `comment-add-${candidateId}`,
+      '코멘트 저장',
+      async () => {
+        await firebaseService.addComment(candidate, selectedJudge, content, audition);
+        setCommentInputs((previous) => ({ ...previous, [candidateId]: '' }));
+      },
+      `${candidate.name} 팀의 코멘트를 저장했습니다.`,
+    );
   };
 
-  const deleteComment = async (candidateId: string, comment: any) => {
-    if (!window.confirm("이 코멘트를 삭제하시겠습니까?")) return;
-    try {
-      await firebaseService.deleteComment(candidateId, comment);
-    } catch (error) {
-      console.error("코멘트 삭제 오류:", error);
+  const deleteComment = async (candidateId: string, comment: Comment) => {
+    if (!audition) {
+      return;
     }
+
+    const candidate = getCandidate(candidateId);
+    if (!candidate) {
+      return;
+    }
+
+    const shouldDelete = await confirm({
+      title: '코멘트를 삭제할까요?',
+      description: '삭제된 코멘트는 복구되지 않습니다.',
+      confirmText: '삭제',
+      tone: 'danger',
+    });
+
+    if (!shouldDelete) {
+      return;
+    }
+
+    await withToast(
+      `comment-delete-${candidateId}-${comment.id}`,
+      '코멘트 삭제',
+      () => firebaseService.deleteComment(candidate, comment, audition),
+      `${candidate.name} 팀의 코멘트를 삭제했습니다.`,
+    );
   };
 
-  // 기타 액션
   const updateItemStrikes = async (candidateId: string, item: string, increment: number) => {
-    if (!selectedJudge) return;
-    const candidate = candidates.find(c => c.id === candidateId);
-    if (!candidate) return;
-    try {
-      const currentItemStrikes = candidate.scores[selectedJudge]?.itemStrikes || {};
-      const newVal = Math.max(0, (currentItemStrikes[item] || 0) + increment);
-      await firebaseService.updateItemStrikes(candidate, selectedJudge, item, newVal);
-    } catch (error) {
-      console.error("스트라이크 업데이트 오류:", error);
+    if (!selectedJudge || !audition) {
+      return;
     }
+
+    const candidate = getCandidate(candidateId);
+    if (!candidate) {
+      return;
+    }
+
+    const currentItemStrikes = candidate.scores[selectedJudge]?.itemStrikes || {};
+    const newValue = Math.max(0, (currentItemStrikes[item] || 0) + increment);
+
+    await withToast(
+      `strike-update-${candidateId}-${item}`,
+      '표시 저장',
+      () => firebaseService.updateItemStrikes(candidate, selectedJudge, item, newValue, audition),
+      `${candidate.name} 팀의 표시를 갱신했습니다.`,
+    );
   };
 
-  const updateSongTitle = async (candidateId: string, newTitle: string) => {
-    try {
-      await firebaseService.updateSongTitle(candidateId, newTitle);
-    } catch (error) {
-      console.error("곡명 업데이트 오류:", error);
+  const updateSongTitle = async (candidateId: string, nextTitle: string) => {
+    if (!audition) {
+      return;
     }
+
+    const candidate = getCandidate(candidateId);
+    if (!candidate) {
+      return;
+    }
+
+    await withToast(
+      `song-update-${candidateId}`,
+      '곡명 저장',
+      () => firebaseService.updateSongTitle(candidate, nextTitle, audition),
+      `${candidate.name} 팀의 곡명을 저장했습니다.`,
+    );
   };
 
-  const deleteCandidate = async (id: string, name: string) => {
-    if (window.confirm(`${name} 참가자를 삭제하시겠습니까?`)) {
-      await firebaseService.deleteCandidate(id);
+  const deleteCandidate = async (candidateId: string, name: string) => {
+    if (!audition) {
+      return;
     }
+
+    const candidate = getCandidate(candidateId);
+    if (!candidate) {
+      return;
+    }
+
+    const shouldDelete = await confirm({
+      title: `${name} 팀을 삭제할까요?`,
+      description: '점수와 코멘트가 함께 사라지며 복구되지 않습니다.',
+      confirmText: '삭제',
+      tone: 'danger',
+    });
+
+    if (!shouldDelete) {
+      return;
+    }
+
+    await withToast(
+      `candidate-delete-${candidateId}`,
+      '팀 삭제',
+      () => firebaseService.deleteCandidate(candidate, audition),
+      `${name} 팀을 삭제했습니다.`,
+    );
   };
 
   const toggleCompletion = async (candidateId: string, currentStatus: boolean) => {
-    if (!selectedJudge) return;
-    try {
-      await firebaseService.toggleJudgeCompletion(candidateId, selectedJudge, currentStatus);
-    } catch (error) {
-      console.error("완료 상태 토글 오류:", error);
+    if (!selectedJudge || !audition || !judgeConfig) {
+      return;
     }
+
+    const candidate = getCandidate(candidateId);
+    if (!candidate) {
+      return;
+    }
+
+    // Edge case 방어: 빈 점수 상태로 완료 처리, 잠긴 팀 재수정, 심사위원 설정 누락 상태를 차단합니다.
+    if (!currentStatus) {
+      if (judgeConfig.type === 'simple' && typeof candidate.scores[selectedJudge]?.simpleTotal !== 'number') {
+        showToast({
+          kind: 'warning',
+          title: '점수 입력 필요',
+          message: '완료 처리 전에 총점을 먼저 입력해 주세요.',
+        });
+        return;
+      }
+
+      if (judgeConfig.type === 'detail') {
+        const hasMissingScore = (judgeConfig.criteria ?? []).some(
+          (criterion) => typeof candidate.scores[selectedJudge]?.[criterion.item] !== 'number',
+        );
+
+        if (hasMissingScore) {
+          showToast({
+            kind: 'warning',
+            title: '세부 점수 누락',
+            message: '완료 처리 전에 모든 항목 점수를 입력해 주세요.',
+          });
+          return;
+        }
+      }
+    }
+
+    await withToast(
+      `completion-toggle-${candidateId}`,
+      currentStatus ? '완료 취소' : '완료 저장',
+      () => firebaseService.toggleJudgeCompletion(candidate, selectedJudge, currentStatus, audition),
+      currentStatus ? `${candidate.name} 팀의 완료 상태를 취소했습니다.` : `${candidate.name} 팀을 완료 처리했습니다.`,
+    );
   };
 
   return {
-    selectedJudge, setSelectedJudge, isObserver,
-    newCandidateName, setNewCandidateName,
-    newSongTitle, setNewSongTitle,
-    commentInputs, setCommentInputs,
-    expandedComments, setExpandedComments,
-    editingSongId, setEditingSongId,
-    tempSongTitle, setTempSongTitle,
-    addCandidate, updateSimpleScore, updateDetailScore,
-    addComment, deleteComment,
-    updateItemStrikes, updateSongTitle, deleteCandidate,
-    toggleCompletion
+    isObserver,
+    newCandidateName,
+    setNewCandidateName,
+    newSongTitle,
+    setNewSongTitle,
+    commentInputs,
+    setCommentInputs,
+    expandedComments,
+    setExpandedComments,
+    editingSongId,
+    setEditingSongId,
+    tempSongTitle,
+    setTempSongTitle,
+    pendingMutation,
+    isCandidateReadOnly,
+    addCandidate,
+    updateSimpleScore,
+    updateDetailScore,
+    addComment,
+    deleteComment,
+    updateItemStrikes,
+    updateSongTitle,
+    deleteCandidate,
+    toggleCompletion,
   };
 };

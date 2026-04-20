@@ -1,16 +1,17 @@
 import React from 'react';
 import { MessageSquare, ChevronDown, ChevronUp, X, Send } from 'lucide-react';
-import type { Candidate } from '../../types';
+import type { Candidate, Comment } from '../../types';
 
 interface CommentSectionProps {
   candidate: Candidate;
   selectedJudge: string;
   commentInput: string;
   isExpanded: boolean;
+  isReadOnly?: boolean;
   onToggleExpand: (id: string) => void;
   onInputChange: (id: string, value: string) => void;
   onAddComment: (id: string) => void;
-  onDeleteComment: (id: string, comment: any) => void;
+  onDeleteComment: (id: string, comment: Comment) => void;
 }
 
 const CommentSection: React.FC<CommentSectionProps> = ({
@@ -18,11 +19,25 @@ const CommentSection: React.FC<CommentSectionProps> = ({
   selectedJudge,
   commentInput,
   isExpanded,
+  isReadOnly = false,
   onToggleExpand,
   onInputChange,
   onAddComment,
   onDeleteComment
 }) => {
+  const formatCommentTime = (createdAt: Comment['createdAt']) => {
+    if (!createdAt) {
+      return '-';
+    }
+
+    if (typeof createdAt === 'object' && createdAt !== null && 'toDate' in createdAt && typeof createdAt.toDate === 'function') {
+      return createdAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    const parsedDate = new Date(createdAt as string | number | Date);
+    return Number.isNaN(parsedDate.getTime()) ? '-' : parsedDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
   return (
     <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
       <div 
@@ -44,7 +59,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
         <div style={{ marginTop: '1rem' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', marginBottom: '1rem' }}>
             {candidate.comments && candidate.comments.length > 0 ? (
-              candidate.comments.map((comment: any) => (
+              candidate.comments.map((comment) => (
                 <div 
                   className="comment-entry"
                   key={comment.id} 
@@ -72,14 +87,14 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                         {comment.author}
                       </span>
                       <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                        {new Date(comment.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {formatCommentTime(comment.createdAt)}
                       </span>
                     </div>
                     <p style={{ fontSize: '0.9rem', lineHeight: '1.5', color: 'rgba(255, 255, 255, 0.9)' }}>
                       {comment.content}
                     </p>
                   </div>
-                  {comment.author === selectedJudge && (
+                  {comment.author === selectedJudge && !isReadOnly && (
                     <button 
                       onClick={() => onDeleteComment(candidate.id, comment)} 
                       style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px' }}
@@ -106,16 +121,17 @@ const CommentSection: React.FC<CommentSectionProps> = ({
             <input 
               className="premium-input" 
               style={{ flex: 1, padding: '0.6rem 1rem', fontSize: '0.9rem' }} 
-              placeholder="질문이나 피드백을 남겨주세요..." 
+              placeholder={isReadOnly ? '잠금된 상태에서는 코멘트를 수정할 수 없습니다.' : '질문이나 피드백을 남겨주세요...'} 
               value={commentInput} 
               onChange={(e) => onInputChange(candidate.id, e.target.value)} 
               onKeyDown={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && onAddComment(candidate.id)} 
+              disabled={isReadOnly}
             />
             <button 
               className="premium-button comment-send-btn" 
               style={{ padding: '0.6rem', borderRadius: '10px' }} 
               onClick={() => onAddComment(candidate.id)} 
-              disabled={!commentInput?.trim()}
+              disabled={!commentInput?.trim() || isReadOnly}
             >
               <Send size={18} />
             </button>

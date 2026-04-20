@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
 import { AlertTriangle, ArrowRight, BadgeCheck, Plus, Settings, Trash2, Users, X } from 'lucide-react';
-import type { Audition, Criterion, JudgeConfig, JudgeType } from '../../types';
+import type { Audition, Criterion, JudgeConfig, JudgeType, RankingPolicy } from '../../types';
 import ModalPortal from '../common/ModalPortal';
+import { useToast } from '../../context/ToastContext.tsx';
+import { useConfirmDialog } from '../../context/ConfirmDialogContext.tsx';
+import { RANKING_POLICY_OPTIONS } from '../../utils/rankingUtils.ts';
 
 interface AuditionSettingsModalProps {
   audition: Audition;
   candidateCount: number;
-  onSave: (judges: JudgeConfig[], dropCount: number) => Promise<void>;
+  onSave: (judges: JudgeConfig[], dropCount: number, rankingPolicy: RankingPolicy) => Promise<void>;
   onDelete: () => Promise<void>;
   onClose: () => void;
 }
@@ -61,9 +64,12 @@ export const AuditionSettingsModal: React.FC<AuditionSettingsModalProps> = ({
 }) => {
   const [judges, setJudges] = useState<EditableJudgeConfig[]>(() => (audition.judges || []).map(toEditableJudge));
   const [dropCount, setDropCount] = useState<number>(audition.dropCount || 0);
+  const [rankingPolicyId, setRankingPolicyId] = useState<string>(audition.rankingPolicy.id);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const { showToast } = useToast();
+  const { confirm } = useConfirmDialog();
 
   const isDeleteReady = deleteConfirmText.trim() === audition.name.trim();
 
@@ -87,7 +93,8 @@ export const AuditionSettingsModal: React.FC<AuditionSettingsModalProps> = ({
         const nextType = value as JudgeType;
 
         if (nextType !== 'detail') {
-          const { criteria: _criteria, ...judgeWithoutCriteria } = judge;
+          const judgeWithoutCriteria = { ...judge };
+          delete judgeWithoutCriteria.criteria;
 
           return {
             ...judgeWithoutCriteria,
@@ -136,26 +143,30 @@ export const AuditionSettingsModal: React.FC<AuditionSettingsModalProps> = ({
 
   const handleSubmit = async () => {
     if (dropCount < 0) {
-      alert('탈락 팀 수는 0 이상이어야 합니다.');
+      showToast({
+        kind: 'warning',
+        title: '탈락 기준 오류',
+        message: '탈락 팀 수는 0 이상이어야 합니다.',
+      });
       return;
     }
 
     // Edge cases: 빈 이름, 중복 이름, 잘못된 PIN, detail 심사위원의 비정상 criteria를 저장 전에 막습니다.
-    const sanitizedJudges: JudgeConfig[] = judges.map(({ localId: _judgeLocalId, criteria, ...judge }) => {
+    const sanitizedJudges: JudgeConfig[] = judges.map((editableJudge) => {
       const baseJudge = {
-        ...judge,
-        name: judge.name.trim(),
-        pin: judge.pin.trim(),
+        name: editableJudge.name.trim(),
+        pin: editableJudge.pin.trim(),
+        type: editableJudge.type,
       };
 
-      if (judge.type !== 'detail') {
+      if (editableJudge.type !== 'detail') {
         return baseJudge;
       }
 
       return {
         ...baseJudge,
         // Firestore 배열 내부 객체에는 undefined 필드가 들어가면 저장이 실패합니다.
-        criteria: (criteria ?? []).map(({ localId: _criterionLocalId, ...criterion }) => ({
+        criteria: (editableJudge.criteria ?? []).map((criterion) => ({
           item: criterion.item.trim(),
           maxScore: Number(criterion.maxScore) || 0,
         })),
@@ -163,18 +174,30 @@ export const AuditionSettingsModal: React.FC<AuditionSettingsModalProps> = ({
     });
 
     if (sanitizedJudges.some((judge) => judge.name.length === 0)) {
-      alert('모든 심사위원 이름을 입력해주세요.');
+      showToast({
+        kind: 'warning',
+        title: '심사위원 이름 확인',
+        message: '모든 심사위원 이름을 입력해 주세요.',
+      });
       return;
     }
 
     const uniqueJudgeNames = new Set(sanitizedJudges.map((judge) => judge.name));
     if (uniqueJudgeNames.size !== sanitizedJudges.length) {
-      alert('심사위원 이름은 서로 중복될 수 없습니다.');
+      showToast({
+        kind: 'warning',
+        title: '중복된 심사위원 이름',
+        message: '심사위원 이름은 서로 중복될 수 없습니다.',
+      });
       return;
     }
 
     if (sanitizedJudges.some((judge) => !/^\d{6}$/.test(judge.pin))) {
-      alert('모든 심사위원 PIN은 숫자 6자리여야 합니다.');
+      showToast({
+        kind: 'warning',
+        title: 'PIN 형식 오류',
+        message: '모든 심사위원 PIN은 숫자 6자리여야 합니다.',
+      });
       return;
     }
 
@@ -188,16 +211,25 @@ export const AuditionSettingsModal: React.FC<AuditionSettingsModalProps> = ({
     });
 
     if (hasInvalidCriteria) {
-      alert('세부 평가 심사위원은 비어 있지 않은 항목명과 1점 이상의 배점을 가져야 합니다.');
+      showToast({
+        kind: 'warning',
+        title: '세부 항목 확인',
+        message: '세부 평가 심사위원은 비어 있지 않은 항목명과 1점 이상의 배점을 가져야 합니다.',
+      });
       return;
     }
 
     setIsSaving(true);
     try {
-      await onSave(sanitizedJudges, dropCount);
+      const rankingPolicy = RANKING_POLICY_OPTIONS.find((policy) => policy.id === rankingPolicyId) ?? audition.rankingPolicy;
+      await onSave(sanitizedJudges, dropCount, rankingPolicy);
       onClose();
-    } catch {
-      alert('오디션 설정 저장 중 오류가 발생했습니다.');
+    } catch (error) {
+      showToast({
+        kind: 'error',
+        title: '오디션 설정 저장 실패',
+        message: error instanceof Error ? error.message : '오디션 설정 저장 중 오류가 발생했습니다.',
+      });
     } finally {
       setIsSaving(false);
     }
@@ -205,7 +237,11 @@ export const AuditionSettingsModal: React.FC<AuditionSettingsModalProps> = ({
 
   const handleDelete = async () => {
     if (!isDeleteReady) {
-      alert('삭제하려면 오디션 이름을 정확히 입력해주세요.');
+      showToast({
+        kind: 'warning',
+        title: '삭제 확인 문구 불일치',
+        message: '삭제하려면 오디션 이름을 정확히 입력해 주세요.',
+      });
       return;
     }
 
@@ -213,7 +249,14 @@ export const AuditionSettingsModal: React.FC<AuditionSettingsModalProps> = ({
       ? `참가자 ${candidateCount}팀의 점수와 코멘트도 함께 삭제됩니다.`
       : '현재 연결된 참가자는 없지만, 오디션 설정은 완전히 삭제됩니다.';
 
-    if (!window.confirm(`"${audition.name}" 오디션을 삭제하시겠습니까?\n${candidateMessage}\n이 작업은 되돌릴 수 없습니다.`)) {
+    const shouldDelete = await confirm({
+      title: `"${audition.name}" 오디션을 휴지통으로 이동할까요?`,
+      description: `${candidateMessage} 휴지통에서 30일 동안 복구할 수 있습니다.`,
+      confirmText: '휴지통으로 이동',
+      tone: 'danger',
+    });
+
+    if (!shouldDelete) {
       return;
     }
 
@@ -221,8 +264,12 @@ export const AuditionSettingsModal: React.FC<AuditionSettingsModalProps> = ({
 
     try {
       await onDelete();
-    } catch {
-      alert('오디션 삭제 중 오류가 발생했습니다.');
+    } catch (error) {
+      showToast({
+        kind: 'error',
+        title: '오디션 삭제 실패',
+        message: error instanceof Error ? error.message : '오디션 삭제 중 오류가 발생했습니다.',
+      });
     } finally {
       setIsDeleting(false);
     }
@@ -303,6 +350,27 @@ export const AuditionSettingsModal: React.FC<AuditionSettingsModalProps> = ({
                       0이면 아무도 탈락하지 않습니다.
                     </span>
                   </div>
+                </div>
+
+                <div className="modal-muted-card" style={{ padding: '1rem', marginTop: '1rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.6rem', color: 'var(--text-muted)' }}>
+                    동점 처리 규칙
+                  </label>
+                  <select
+                    className="premium-input"
+                    value={rankingPolicyId}
+                    onChange={(event) => setRankingPolicyId(event.target.value)}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    {RANKING_POLICY_OPTIONS.map((policy) => (
+                      <option key={policy.id} value={policy.id}>
+                        {policy.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.84rem', marginTop: '0.55rem' }}>
+                    확정 시 이 규칙으로 최종 순위를 고정합니다.
+                  </p>
                 </div>
               </section>
 
@@ -483,11 +551,11 @@ export const AuditionSettingsModal: React.FC<AuditionSettingsModalProps> = ({
                 </p>
                 <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.9rem', marginBottom: '0.75rem' }}>
                   {candidateCount > 0
-                    ? `참가자 ${candidateCount}팀의 점수, 완료 상태, 코멘트도 함께 삭제됩니다.`
-                    : '현재 연결된 참가자는 없지만, 오디션 정보와 심사위원 설정은 완전히 삭제됩니다.'}
+                    ? `참가자 ${candidateCount}팀의 점수, 완료 상태, 코멘트도 함께 휴지통으로 이동됩니다.`
+                    : '현재 연결된 참가자는 없지만, 오디션 정보와 심사위원 설정은 휴지통으로 이동됩니다.'}
                 </p>
                 <p style={{ color: '#fecaca', fontSize: '0.86rem', marginBottom: '0.8rem' }}>
-                  삭제를 진행하려면 아래 입력란에 오디션 이름을 정확히 입력하세요.
+                  휴지통 이동을 진행하려면 아래 입력란에 오디션 이름을 정확히 입력하세요.
                 </p>
 
                 <div className="modal-muted-card" style={{ padding: '0.9rem 1rem', marginBottom: '0.8rem' }}>
@@ -527,11 +595,11 @@ export const AuditionSettingsModal: React.FC<AuditionSettingsModalProps> = ({
                     cursor: isDeleteReady && !isSaving && !isDeleting ? 'pointer' : 'not-allowed'
                   }}
                 >
-                  {isDeleting ? '삭제 중...' : '오디션 삭제'}
+                  {isDeleting ? '이동 중...' : '휴지통으로 이동'}
                 </button>
 
                 <p style={{ color: 'rgba(255,255,255,0.56)', fontSize: '0.82rem', marginTop: '0.85rem' }}>
-                  다른 오디션이 없으면 삭제 직후 기본 오디션이 자동으로 다시 생성됩니다.
+                  다른 오디션이 없으면 이동 직후 기본 오디션이 자동으로 다시 생성됩니다.
                 </p>
                 </section>
               </aside>

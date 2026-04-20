@@ -1,163 +1,341 @@
-import React, { useState, useEffect } from 'react';
-import type { Candidate, JudgeConfig } from './types';
+import React, { Suspense, useEffect, useMemo, useState } from 'react';
+import type { AppView, Candidate, JudgeConfig, RankingPolicy } from './types';
 import { useCandidates } from './hooks/useCandidates';
 import { useJudgeActions } from './hooks/useJudgeActions';
 import { useAuditions } from './hooks/useAuditions';
 import { useAuth } from './hooks/useAuth';
+import { useAdminLogs } from './hooks/useAdminLogs';
+import { useTrashBatches } from './hooks/useTrashBatches';
 import { firebaseService } from './api/firebaseService';
 import PinModal from './components/auth/PinModal';
-import { AuditionSettingsModal } from './components/admin/AuditionSettingsModal';
 import ModalPortal from './components/common/ModalPortal';
-import CandidateScoreCard from './components/candidate/CandidateScoreCard';
-import Leaderboard from './components/leaderboard/Leaderboard';
-import StatisticsPanel from './components/stats/StatisticsPanel';
-import { ArrowRight, CheckCircle, ChevronDown, ChevronUp, Database, Edit2, LayoutGrid, LogOut, Plus, Settings, ShieldCheck, Star, UserPlus, Users, X } from 'lucide-react';
+import {
+  ArrowRight,
+  CheckCircle,
+  ChevronDown,
+  ChevronUp,
+  Database,
+  LayoutGrid,
+  LogOut,
+  Plus,
+  ShieldCheck,
+  Star,
+  Tv,
+  Users,
+  X,
+} from 'lucide-react';
+import { useToast } from './context/ToastContext.tsx';
 import { getJudgeScore } from './utils/statsUtils';
 
-type AdminPinIntent = 'settings' | 'create' | null;
+type AdminPinIntent = 'admin-view' | 'settings' | 'create' | null;
+const AdminDashboardView = React.lazy(() => import('./components/admin/AdminDashboardView'));
+const ObserverBoardView = React.lazy(() => import('./components/observer/ObserverBoardView'));
+const ReportPrintView = React.lazy(() => import('./components/report/ReportPrintView'));
+const AuditionSettingsModal = React.lazy(() =>
+  import('./components/admin/AuditionSettingsModal').then((module) => ({ default: module.AuditionSettingsModal })),
+);
+const CandidateScoreCard = React.lazy(() => import('./components/candidate/CandidateScoreCard'));
+const Leaderboard = React.lazy(() => import('./components/leaderboard/Leaderboard'));
+
+const ViewLoaderFallback: React.FC<{ message: string }> = ({ message }) => (
+  <div
+    className="glass-card fade-in"
+    style={{
+      padding: '2rem',
+      marginTop: '1rem',
+      textAlign: 'center',
+      color: 'var(--text-muted)',
+    }}
+  >
+    {message}
+  </div>
+);
 
 const App: React.FC = () => {
+  const [currentView, setCurrentView] = useState<AppView>('landing');
   const [isCompletedExpanded, setIsCompletedExpanded] = useState(false);
   const [isAddingAudition, setIsAddingAudition] = useState(false);
   const [newAuditionName, setNewAuditionName] = useState('');
-  
   const [selectedJudgeToAuth, setSelectedJudgeToAuth] = useState<JudgeConfig | null>(null);
   const [isAdminPinModalOpen, setIsAdminPinModalOpen] = useState(false);
   const [adminPinIntent, setAdminPinIntent] = useState<AdminPinIntent>(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
-  const { judgeRole, isAdmin, isLoadingAuth, loginWithPin, loginAdmin, logout } = useAuth();
+  const { showToast } = useToast();
+  const { judgeRole, isAdmin, isLoadingAuth, loginWithPin, loginAdmin, logout, adminTimeoutCount, adminSessionRemainingMs } =
+    useAuth();
+  const currentJudge = judgeRole;
+  const effectiveView: AppView =
+    currentView === 'admin' && !isAdmin
+      ? 'landing'
+      : currentView === 'judge' && !currentJudge
+        ? 'landing'
+        : currentView;
   const { auditions, activeAuditionId, setActiveAuditionId, isLoading: isAuditionLoading } = useAuditions();
-  const activeAudition = auditions.find(a => a.id === activeAuditionId);
-  const activeJudges = activeAudition?.activeJudges || [];
-  
-  const { candidates, sortedCandidates, isLoading: isCandidatesLoading } = useCandidates(activeAudition || null);
-  
-  const {
-    selectedJudge: currentJudge, setSelectedJudge, isObserver,
-    newCandidateName, setNewCandidateName,
-    newSongTitle, setNewSongTitle,
-    commentInputs, setCommentInputs,
-    expandedComments, setExpandedComments,
-    editingSongId, setEditingSongId,
-    tempSongTitle, setTempSongTitle,
-    addCandidate, updateSimpleScore, updateDetailScore,
-    addComment, deleteComment,
-    updateItemStrikes, updateSongTitle, deleteCandidate,
-    toggleCompletion
-  } = useJudgeActions(candidates, activeAudition || null);
+  const activeAudition = auditions.find((audition) => audition.id === activeAuditionId) ?? null;
+  const { candidates, sortedCandidates, isLoading: isCandidatesLoading } = useCandidates(activeAudition);
+  const { logs } = useAdminLogs(activeAuditionId);
+  const { trashBatches } = useTrashBatches();
 
-  const isArchived = activeAudition?.status === 'archived';
+  const {
+    isObserver,
+    newCandidateName,
+    setNewCandidateName,
+    newSongTitle,
+    setNewSongTitle,
+    commentInputs,
+    setCommentInputs,
+    expandedComments,
+    setExpandedComments,
+    editingSongId,
+    setEditingSongId,
+    tempSongTitle,
+    setTempSongTitle,
+    isCandidateReadOnly,
+    addCandidate,
+    updateSimpleScore,
+    updateDetailScore,
+    addComment,
+    deleteComment,
+    updateItemStrikes,
+    updateSongTitle,
+    deleteCandidate,
+    toggleCompletion,
+  } = useJudgeActions(candidates, activeAudition, currentJudge);
+
+  const activeJudges = activeAudition?.activeJudges ?? [];
 
   useEffect(() => {
-    if (judgeRole) {
-      setSelectedJudge(judgeRole);
-      setSelectedJudgeToAuth(null);
-    } else {
-      setSelectedJudge(null);
+    if (adminTimeoutCount > 0) {
+      showToast({
+        kind: 'warning',
+        title: '관리자 세션이 만료되었습니다',
+        message: '30분 동안 활동이 없어 관리자 화면을 종료했습니다. 다시 인증해 주세요.',
+      });
     }
-  }, [judgeRole, setSelectedJudge]);
+  }, [adminTimeoutCount, showToast]);
 
-  const handleCreateAudition = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newAuditionName.trim()) return;
-    try {
-      const newAud = await firebaseService.createAudition(newAuditionName.trim());
-      setActiveAuditionId(newAud.id);
-      setNewAuditionName('');
-      setIsAddingAudition(false);
-    } catch {
-      alert("오디션 생성 중 오류가 발생했습니다.");
+  const completedReviewCount = useMemo(
+    () => candidates.filter((candidate) => Object.values(candidate.scores).some((score) => score.isCompleted)).length,
+    [candidates],
+  );
+
+  const judgeCount = activeAudition?.judges?.length ?? 0;
+
+  const getJudgeTotal = (candidate: Candidate, judgeName: string) => {
+    if (!activeAudition) {
+      return 0;
     }
+
+    return getJudgeScore(candidate, judgeName, activeAudition, false) ?? 0;
   };
 
-  const handleUpdateAuditionName = async () => {
-    if (!activeAuditionId || !activeAudition) return;
-    const newName = window.prompt("새로운 오디션 이름을 입력하세요:", activeAudition.name);
-    if (newName && newName.trim() && newName !== activeAudition.name) {
-      try {
-        await firebaseService.updateAuditionName(activeAuditionId, newName.trim());
-      } catch {
-        alert("이름 변경 중 오류가 발생했습니다.");
+  const requireAdminAuth = (intent: Exclude<AdminPinIntent, null>) => {
+    if (isAdmin) {
+      if (intent === 'admin-view') {
+        setCurrentView('admin');
+      } else if (intent === 'create') {
+        setIsAddingAudition(true);
+      } else if (intent === 'settings') {
+        setIsSettingsModalOpen(true);
       }
-    }
-  };
-
-  const handleSettingsClick = () => {
-    if (!activeAudition) return;
-    if (isAdmin) {
-      setIsSettingsModalOpen(true);
-    } else {
-      setAdminPinIntent('settings');
-      setIsAdminPinModalOpen(true);
-    }
-  };
-
-  const handleAddAuditionClick = () => {
-    if (isAdmin) {
-      setIsAddingAudition(true);
       return;
     }
 
-    setAdminPinIntent('create');
+    setAdminPinIntent(intent);
     setIsAdminPinModalOpen(true);
   };
 
   const handleAdminAuth = async (pin: string) => {
     const success = await loginAdmin(pin);
+
     if (success) {
       setIsAdminPinModalOpen(false);
-      if (adminPinIntent === 'create') {
+      if (adminPinIntent === 'admin-view') {
+        setCurrentView('admin');
+      } else if (adminPinIntent === 'create') {
         setIsAddingAudition(true);
       } else if (adminPinIntent === 'settings') {
         setIsSettingsModalOpen(true);
       }
       setAdminPinIntent(null);
     }
+
     return success;
   };
 
-  const handleSaveSettings = async (judges: JudgeConfig[], dropCount: number) => {
-    if (activeAuditionId) {
-      await firebaseService.updateAuditionSettings(activeAuditionId, judges, dropCount);
+  const handleJudgeAuth = async (judge: JudgeConfig, pin: string) => {
+    const success = await loginWithPin(judge.name, pin, activeAudition!);
+
+    if (success) {
+      setSelectedJudgeToAuth(null);
+      setCurrentView('judge');
+    }
+
+    return success;
+  };
+
+  const handleCreateAudition = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    const trimmedName = newAuditionName.trim();
+    if (!trimmedName) {
+      showToast({
+        kind: 'warning',
+        title: '오디션 이름을 확인해 주세요',
+        message: '새 오디션 이름은 비워둘 수 없습니다.',
+      });
+      return;
+    }
+
+    try {
+      const newAudition = await firebaseService.createAudition(trimmedName);
+      setActiveAuditionId(newAudition.id);
+      setNewAuditionName('');
+      setIsAddingAudition(false);
+      setCurrentView('admin');
+      showToast({
+        kind: 'success',
+        title: '오디션 생성 완료',
+        message: `${trimmedName} 오디션을 시작했습니다.`,
+      });
+    } catch (error) {
+      showToast({
+        kind: 'error',
+        title: '오디션 생성 실패',
+        message: error instanceof Error ? error.message : '오디션 생성 중 오류가 발생했습니다.',
+      });
     }
   };
 
-  const handleDeleteAudition = async () => {
-    if (!activeAuditionId) {
+  const handleRenameAudition = async (name: string) => {
+    if (!activeAuditionId || !activeAudition) {
+      throw new Error('이름을 변경할 오디션이 선택되지 않았습니다.');
+    }
+
+    await firebaseService.updateAuditionName(activeAuditionId, activeAudition.name, name);
+  };
+
+  const handleSaveSettings = async (judges: JudgeConfig[], dropCount: number, rankingPolicy: RankingPolicy) => {
+    if (!activeAuditionId || !activeAudition) {
+      throw new Error('설정을 저장할 오디션이 없습니다.');
+    }
+
+    await firebaseService.updateAuditionSettings(activeAuditionId, activeAudition.name, judges, dropCount, rankingPolicy);
+  };
+
+  const handleMoveAuditionToTrash = async () => {
+    if (!activeAudition) {
       throw new Error('삭제할 오디션이 선택되지 않았습니다.');
     }
 
-    const nextAuditionId = auditions.find((audition) => audition.id !== activeAuditionId)?.id || null;
+    const nextAuditionId = auditions.find((audition) => audition.id !== activeAudition.id)?.id ?? null;
 
-    await firebaseService.deleteAudition(activeAuditionId);
-
-    setIsSettingsModalOpen(false);
-    setIsAdminPinModalOpen(false);
-    setAdminPinIntent(null);
-    setSelectedJudgeToAuth(null);
+    await firebaseService.moveAuditionToTrash(activeAudition, candidates);
     setActiveAuditionId(nextAuditionId);
+    setIsSettingsModalOpen(false);
+    showToast({
+      kind: 'success',
+      title: '오디션 이동 완료',
+      message: `${activeAudition.name} 오디션을 휴지통으로 이동했습니다.`,
+    });
   };
 
-  // 헬퍼: 현재 오디션 기반 단순 총점 가져오기
-  const getJudgeTotal = (candidate: Candidate, judgeName: string) => {
-    if (!activeAudition) return 0;
-    return getJudgeScore(candidate, judgeName, activeAudition) || 0;
+  const handleToggleActiveJudge = async (judgeName: string) => {
+    if (!activeAuditionId || !activeAudition) {
+      throw new Error('활성 오디션이 없습니다.');
+    }
+
+    const isActive = activeJudges.includes(judgeName);
+    const nextActiveJudges = isActive
+      ? activeJudges.filter((activeJudge) => activeJudge !== judgeName)
+      : [...activeJudges, judgeName];
+
+    await firebaseService.updateActiveJudges(activeAuditionId, nextActiveJudges);
   };
 
-  const completedReviewCount = candidates.filter((candidate) =>
-    Object.values(candidate.scores).some((score) => score.isCompleted),
-  ).length;
-  const auditionCount = auditions.length;
-  const judgeCount = activeAudition?.judges?.length ?? 0;
+  const handleFinalizeAudition = async () => {
+    if (!activeAudition) {
+      throw new Error('확정할 오디션이 없습니다.');
+    }
+
+    if (candidates.length === 0) {
+      throw new Error('참가팀이 없으면 결과를 확정할 수 없습니다.');
+    }
+
+    await firebaseService.finalizeAudition(activeAudition, candidates);
+  };
+
+  const handleReopenAudition = async () => {
+    if (!activeAudition) {
+      throw new Error('재개방할 오디션이 없습니다.');
+    }
+
+    await firebaseService.reopenAudition(activeAudition);
+  };
+
+  const handleUnlockCandidate = async (candidate: Candidate) => {
+    if (!activeAudition) {
+      throw new Error('오디션 정보가 없습니다.');
+    }
+
+    await firebaseService.unlockCandidate(activeAudition, candidate);
+  };
+
+  const handleRestoreTrash = async (batchId: string) => {
+    await firebaseService.restoreTrashBatch(batchId);
+  };
+
+  const handlePurgeTrash = async (batchId: string) => {
+    await firebaseService.purgeTrashBatch(batchId);
+  };
+
+  const handleExportWorkbook = async () => {
+    if (!activeAudition) {
+      return;
+    }
+
+    try {
+      await firebaseService.exportFinalWorkbook(activeAudition, candidates);
+      showToast({
+        kind: 'success',
+        title: 'XLSX 내보내기 완료',
+        message: '최종 결과 보고서를 다운로드했습니다.',
+      });
+    } catch (error) {
+      showToast({
+        kind: 'error',
+        title: 'XLSX 내보내기 실패',
+        message: error instanceof Error ? error.message : '최종 결과 보고서 생성 중 오류가 발생했습니다.',
+      });
+    }
+  };
+
+  const candidateReadOnlyLabel = (candidate: Candidate) => {
+    if (activeAudition?.status === 'archived') {
+      return '보관됨';
+    }
+
+    if (activeAudition?.finalization.isFinalized && isCandidateReadOnly(candidate.id)) {
+      return '잠금됨';
+    }
+
+    return '읽기 전용';
+  };
 
   if (isLoadingAuth || isAuditionLoading || isCandidatesLoading) {
     return (
-      <div style={{ 
-        height: '100vh', 
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'var(--background)', color: 'white', fontSize: '1.2rem'
-      }}>
+      <div
+        style={{
+          height: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'var(--background)',
+          color: 'white',
+          fontSize: '1.2rem',
+        }}
+      >
         <div className="fade-in">시스템 준비 중...</div>
       </div>
     );
@@ -165,7 +343,55 @@ const App: React.FC = () => {
 
   return (
     <div className="container">
-      {!currentJudge ? (
+      <Suspense fallback={<ViewLoaderFallback message="참관 보드를 불러오는 중입니다." />}>
+        {effectiveView === 'observer-board' && activeAudition ? (
+          <ObserverBoardView
+            audition={activeAudition}
+            rankedCandidates={sortedCandidates}
+            onBack={() => setCurrentView(isAdmin ? 'admin' : 'landing')}
+          />
+        ) : null}
+      </Suspense>
+
+      <Suspense fallback={<ViewLoaderFallback message="인쇄용 결과 화면을 불러오는 중입니다." />}>
+        {effectiveView === 'report-print' && activeAudition ? (
+          <ReportPrintView audition={activeAudition} candidates={candidates} onBack={() => setCurrentView('admin')} />
+        ) : null}
+      </Suspense>
+
+      <Suspense fallback={<ViewLoaderFallback message="관리자 화면을 불러오는 중입니다." />}>
+        {effectiveView === 'admin' && activeAudition ? (
+          <AdminDashboardView
+            key={activeAudition.id}
+            activeAudition={activeAudition}
+            auditions={auditions}
+            activeAuditionId={activeAuditionId}
+            candidates={candidates}
+            rankedCandidates={sortedCandidates}
+            logs={logs}
+            trashBatches={trashBatches}
+            adminSessionRemainingMs={adminSessionRemainingMs}
+            onBack={() => setCurrentView('landing')}
+            onChangeAudition={(auditionId) => setActiveAuditionId(auditionId)}
+            onRenameAudition={handleRenameAudition}
+            onOpenSettings={() => requireAdminAuth('settings')}
+            onOpenCreateAudition={() => requireAdminAuth('create')}
+            onToggleActiveJudge={handleToggleActiveJudge}
+            onFinalize={handleFinalizeAudition}
+            onReopen={handleReopenAudition}
+            onUnlockCandidate={handleUnlockCandidate}
+            onRestoreTrash={handleRestoreTrash}
+            onPurgeTrash={handlePurgeTrash}
+            onExportWorkbook={() => {
+              void handleExportWorkbook();
+            }}
+            onOpenPrintReport={() => setCurrentView('report-print')}
+            onOpenObserverBoard={() => setCurrentView('observer-board')}
+          />
+        ) : null}
+      </Suspense>
+
+      {effectiveView === 'landing' ? (
         <div className="landing-page fade-in">
           <header className="landing-hero">
             <div className="glass-card landing-hero__content" style={{ padding: '2rem 2.2rem' }}>
@@ -173,18 +399,19 @@ const App: React.FC = () => {
                 <Star size={14} fill="currentColor" />
                 Audition Master
               </span>
-              <h1 className="main-title" style={{ marginBottom: '0.85rem', marginTop: '1rem' }}>심사 운영 콘솔</h1>
+              <h1 className="main-title" style={{ marginBottom: '0.85rem', marginTop: '1rem' }}>
+                심사 운영 콘솔
+              </h1>
+              <p>현장 심사, 운영 관리, 대형 화면 참관, 최종 결과 출력까지 한 흐름으로 정리한 운영 앱입니다.</p>
             </div>
 
             <div className="glass-card landing-hero__focus" style={{ padding: '1.8rem' }}>
               <p className="landing-focus-label">현재 선택된 오디션</p>
-              <div className="landing-focus-name">
-                {activeAudition?.name || '선택된 오디션이 없습니다'}
-              </div>
+              <div className="landing-focus-name">{activeAudition?.name || '선택된 오디션이 없습니다'}</div>
               <div className="info-chip-row">
                 <span className="info-chip">
                   <Database size={15} />
-                  오디션 {auditionCount}개
+                  오디션 {auditions.length}개
                 </span>
                 <span className="info-chip">
                   <Users size={15} />
@@ -205,11 +432,11 @@ const App: React.FC = () => {
                   <Database size={14} />
                   운영 허브
                 </span>
-                <h2 style={{ fontSize: '1.7rem', margin: '0.95rem 0 0.4rem' }}>현재 오디션을 정리하고 빠르게 이동하세요</h2>
+                <h2 style={{ fontSize: '1.7rem', margin: '0.95rem 0 0.4rem' }}>관리자 화면과 참관 모드로 빠르게 이동하세요</h2>
               </div>
               <span className={`status-badge ${isAdmin ? 'status-badge--success' : 'status-badge--muted'}`}>
                 <ShieldCheck size={16} />
-                {isAdmin ? '관리자 권한 활성화됨' : '관리자 PIN 입력 후 설정 가능'}
+                {isAdmin ? '관리자 권한 활성화됨' : '관리자 PIN 입력 후 운영 화면 진입'}
               </span>
             </div>
 
@@ -218,27 +445,18 @@ const App: React.FC = () => {
                 <label style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.88rem', marginBottom: '0.8rem' }}>
                   활성 오디션 선택
                 </label>
-                <div style={{ display: 'flex', gap: '0.65rem', marginBottom: '0.85rem' }}>
-                  <select
-                    className="premium-input"
-                    style={{ flex: 1, minHeight: '48px', cursor: 'pointer' }}
-                    value={activeAuditionId || ''}
-                    onChange={(e) => setActiveAuditionId(e.target.value)}
-                  >
-                    {auditions.map((audition) => (
-                      <option key={audition.id} value={audition.id}>{audition.name}</option>
-                    ))}
-                  </select>
-                  <button
-                    className="premium-button secondary-btn"
-                    style={{ width: '48px', padding: 0 }}
-                    onClick={handleUpdateAuditionName}
-                    title="오디션 이름 변경"
-                    disabled={!activeAudition}
-                  >
-                    <Edit2 size={16} />
-                  </button>
-                </div>
+                <select
+                  className="premium-input"
+                  style={{ minHeight: '48px', cursor: 'pointer' }}
+                  value={activeAuditionId || ''}
+                  onChange={(event) => setActiveAuditionId(event.target.value)}
+                >
+                  {auditions.map((audition) => (
+                    <option key={audition.id} value={audition.id}>
+                      {audition.name}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="action-stack">
@@ -263,22 +481,19 @@ const App: React.FC = () => {
               </div>
 
               <div className="glass-card" style={{ padding: '1.35rem', background: 'var(--surface-soft)' }}>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginBottom: '0.85rem' }}>빠른 작업</p>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginBottom: '0.85rem' }}>빠른 진입</p>
                 <div className="action-stack">
-                  <button
-                    className="premium-button secondary-btn"
-                    onClick={handleSettingsClick}
-                    disabled={!activeAudition}
-                  >
-                    <Settings size={18} />
-                    오디션 상세 설정
+                  <button className="premium-button secondary-btn" onClick={() => requireAdminAuth('admin-view')} disabled={!activeAudition}>
+                    <ShieldCheck size={18} />
+                    관리자 화면 열기
                   </button>
                   <button
-                    className="premium-button"
-                    onClick={handleAddAuditionClick}
+                    className="premium-button secondary-btn"
+                    onClick={() => setCurrentView('observer-board')}
+                    disabled={!activeAudition}
                   >
-                    <Plus size={18} />
-                    새 오디션 시작
+                    <Tv size={18} />
+                    참관 보드 열기
                   </button>
                 </div>
               </div>
@@ -299,23 +514,25 @@ const App: React.FC = () => {
           </div>
 
           <div className="judge-selection">
-            {activeAudition?.judges?.map((judge: JudgeConfig) => (
-              <div
-                key={judge.name}
-                className="glass-card judge-card hover-lift"
-                onClick={() => setSelectedJudgeToAuth(judge)}
-              >
+            {activeAudition?.judges?.map((judge) => (
+              <div key={judge.name} className="glass-card judge-card hover-lift" onClick={() => setSelectedJudgeToAuth(judge)}>
                 <div>
                   <span className="judge-card__type">
-                    {judge.type === 'observer'
-                      ? '참관 모드'
-                      : judge.type === 'simple'
-                        ? '총점 평가'
-                        : '세부 평가'}
+                    {judge.type === 'observer' ? '참관 모드' : judge.type === 'simple' ? '총점 평가' : '세부 평가'}
                   </span>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
-                  <div style={{ width: '58px', height: '58px', borderRadius: '18px', background: 'rgba(99, 102, 241, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div
+                    style={{
+                      width: '58px',
+                      height: '58px',
+                      borderRadius: '18px',
+                      background: 'rgba(99, 102, 241, 0.12)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
                     <Users size={30} color="var(--primary)" />
                   </div>
                   <div>
@@ -328,113 +545,21 @@ const App: React.FC = () => {
                 </div>
               </div>
             ))}
+
             {(!activeAudition?.judges || activeAudition.judges.length === 0) && (
-              <div className="glass-card" style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '3rem', color: 'var(--text-muted)', background: 'var(--surface-soft)' }}>
-                <p>등록된 심사위원이 없습니다. 상세 설정에서 심사위원을 먼저 추가해 주세요.</p>
+              <div
+                className="glass-card"
+                style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '3rem', color: 'var(--text-muted)', background: 'var(--surface-soft)' }}
+              >
+                <p>등록된 심사위원이 없습니다. 관리자 화면에서 심사위원을 먼저 추가해 주세요.</p>
               </div>
             )}
           </div>
-
-          {/* Judge PIN Verification Modal */}
-          {selectedJudgeToAuth && (
-            <PinModal 
-              title={`${selectedJudgeToAuth.name} ${selectedJudgeToAuth.type !== 'observer' ? '심사위원' : ''}`}
-              onVerify={(pin) => loginWithPin(selectedJudgeToAuth.name, pin, activeAudition!)}
-              onClose={() => setSelectedJudgeToAuth(null)}
-            />
-          )}
-
-          {/* Admin PIN Verification Modal */}
-          {isAdminPinModalOpen && (
-            <PinModal 
-              title={adminPinIntent === 'create' ? '새 오디션 생성' : '관리자 설정'}
-              onVerify={handleAdminAuth}
-              onClose={() => {
-                setIsAdminPinModalOpen(false);
-                setAdminPinIntent(null);
-              }}
-            />
-          )}
-
-          {/* Admin Settings Modal */}
-          {isSettingsModalOpen && activeAudition && (
-            <AuditionSettingsModal 
-              audition={activeAudition}
-              candidateCount={candidates.length}
-              onSave={handleSaveSettings}
-              onDelete={handleDeleteAudition}
-              onClose={() => setIsSettingsModalOpen(false)}
-            />
-          )}
-
-          {/* New Audition Modal */}
-          {isAddingAudition && (
-            <ModalPortal>
-              <div className="modal-overlay-shell fade-in">
-                <div className="modal-surface modal-entrance" style={{ maxWidth: '520px' }}>
-                  <button
-                    type="button"
-                    className="modal-close-button"
-                    onClick={() => setIsAddingAudition(false)}
-                    aria-label="새 오디션 생성 모달 닫기"
-                  >
-                    <X size={18} />
-                  </button>
-
-                  <div className="modal-content">
-                    <div className="modal-header-row">
-                      <div className="modal-header-copy">
-                        <span className="modal-kicker">
-                          <Plus size={14} />
-                          새 오디션
-                        </span>
-                        <h2>새 오디션 생성</h2>
-                      </div>
-                    </div>
-
-                    <form onSubmit={handleCreateAudition}>
-                      <div className="modal-section" style={{ marginBottom: '1rem' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                          <div>
-                            <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)' }}>오디션 이름</label>
-                            <input
-                              autoFocus
-                              className="premium-input"
-                              placeholder="예: 2026 상반기 밴드 오디션"
-                              value={newAuditionName}
-                              onChange={(e) => setNewAuditionName(e.target.value)}
-                            />
-                          </div>
-                          <div className="modal-muted-card" style={{ padding: '0.9rem 1rem' }}>
-                            <p className="modal-summary-label">관리자 인증 상태</p>
-                            <p style={{ fontWeight: 700 }}>
-                              관리자 PIN 확인 완료
-                            </p>
-                            <p style={{ marginTop: '0.35rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                              새 오디션 생성은 관리자 인증 이후에만 진행할 수 있습니다.
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="modal-action-bar" style={{ marginTop: 0, paddingTop: 0, borderTop: 'none' }}>
-                        <button type="button" className="premium-button secondary-btn" style={{ flex: 1 }} onClick={() => setIsAddingAudition(false)}>
-                          취소
-                        </button>
-                        <button type="submit" className="premium-button" style={{ flex: 1 }} disabled={!newAuditionName.trim()}>
-                          생성하기
-                        </button>
-                      </div>
-                    </form>
-                  </div>
-                </div>
-              </div>
-            </ModalPortal>
-          )}
         </div>
-      ) : (
+      ) : null}
+
+      {effectiveView === 'judge' && activeAudition && currentJudge ? (
         <div className="dashboard fade-in">
-          {/* Dashboard Code (same mostly, slightly refactored with activeAudition logic) */}
           <div className="dashboard-header">
             <div className="dashboard-identity" style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
               <div className="dashboard-title-row" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -444,207 +569,272 @@ const App: React.FC = () => {
                 </h2>
               </div>
               <div className="dashboard-session-meta" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginLeft: '0.2rem' }}>
-                <span className="glass-card dashboard-audition-chip" style={{ padding: '0.2rem 0.6rem', width: 'auto', fontSize: '0.8rem', background: 'rgba(255,255,255,0.05)' }} title={activeAudition?.name}>
-                  {activeAudition?.name}
+                <span
+                  className="glass-card dashboard-audition-chip"
+                  style={{ padding: '0.2rem 0.6rem', width: 'auto', fontSize: '0.8rem', background: 'rgba(255,255,255,0.05)' }}
+                  title={activeAudition.name}
+                >
+                  {activeAudition.name}
                 </span>
-                <span className="dashboard-session-status" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>보안 세션 활성화</span>
+                <span className="dashboard-session-status" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  {activeAudition.finalization.isFinalized ? '최종 결과 잠금 상태' : '보안 세션 활성화'}
+                </span>
               </div>
             </div>
-            <button 
-                className="premium-button logout-btn dashboard-logout-btn" 
-                style={{ 
-                  background: 'rgba(244, 63, 94, 0.1)', 
-                  color: '#f43f5e', 
-                  border: '1px solid rgba(244, 63, 94, 0.2)' 
-                }} 
-                onClick={logout}
-              >
-                <LogOut size={18} /> 
-                {isObserver ? '나가기' : '심사 종료'}
-              </button>
-            </div>
+            <button
+              className="premium-button logout-btn dashboard-logout-btn"
+              style={{
+                background: 'rgba(244, 63, 94, 0.1)',
+                color: '#f43f5e',
+                border: '1px solid rgba(244, 63, 94, 0.2)',
+              }}
+              onClick={() => {
+                logout();
+                setCurrentView('landing');
+              }}
+            >
+              <LogOut size={18} />
+              {isObserver ? '나가기' : '심사 종료'}
+            </button>
+          </div>
 
-          <div className="dashboard-content">
-            <section className="dashboard-main-column" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-              {!isObserver && (
-                <div className="glass-card fade-in dashboard-form-card">
-                  <div className="dashboard-card-title-row" style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', marginBottom: '1.5rem' }}>
-                    <UserPlus size={22} color="var(--primary)" />
-                    <h3 style={{ fontSize: '1.4rem' }}>새 팀 등록</h3>
-                  </div>
-                  <form onSubmit={addCandidate} className="flex-column" style={{ gap: '1rem' }}>
-                    <div className="input-row" style={{ display: 'flex', gap: '1rem' }}>
-                      <input 
-                        className="premium-input" 
-                        placeholder="팀 이름" 
-                        value={newCandidateName} 
-                        onChange={(e) => setNewCandidateName(e.target.value)} 
-                      />
-                      <input 
-                        className="premium-input" 
-                        placeholder="곡명 (예: 밤양갱)" 
-                        value={newSongTitle} 
-                        onChange={(e) => setNewSongTitle(e.target.value)} 
-                      />
+          <Suspense fallback={<ViewLoaderFallback message="심사 화면을 준비하는 중입니다." />}>
+            <div className="dashboard-content">
+              <section className="dashboard-main-column" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                {!isObserver && (
+                  <div className="glass-card fade-in dashboard-form-card">
+                    <div className="dashboard-card-title-row" style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', marginBottom: '1.5rem' }}>
+                      <Plus size={22} color="var(--primary)" />
+                      <h3 style={{ fontSize: '1.4rem' }}>새 팀 등록</h3>
                     </div>
-                    <button type="submit" className="premium-button">팀 등록</button>
-                  </form>
-                </div>
-              )}
-
-              <div className="dashboard-workflow" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                <h3 className="dashboard-stage-title" style={{ 
-                  fontSize: '1.4rem', 
-                  borderLeft: '4px solid var(--primary)', 
-                  paddingLeft: '1rem',
-                  marginBottom: '0.5rem'
-                }}>
-                  {isObserver ? '실시간 참가 현황' : '채점 진행 중인 팀'}
-                </h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                  {candidates
-                    .filter(c => !currentJudge || !(c.scores[currentJudge]?.isCompleted))
-                    .map((candidate: Candidate) => (
-                      <CandidateScoreCard 
-                        key={candidate.id}
-                        candidate={candidate}
-                        selectedJudge={currentJudge!}
-                        activeAudition={activeAudition!}
-                        isObserver={isObserver}
-                        getJudgeTotal={getJudgeTotal}
-                        editingSongId={editingSongId}
-                        setEditingSongId={setEditingSongId}
-                        tempSongTitle={tempSongTitle}
-                        setTempSongTitle={setTempSongTitle}
-                        updateSongTitle={updateSongTitle}
-                        deleteCandidate={deleteCandidate}
-                        updateSimpleScore={updateSimpleScore}
-                        updateDetailScore={updateDetailScore}
-                        updateItemStrikes={updateItemStrikes}
-                        commentInput={commentInputs[candidate.id] || ''}
-                        isCommentExpanded={!!expandedComments[candidate.id]}
-                        onToggleComment={(id) => setExpandedComments(prev => ({ ...prev, [id]: !prev[id] }))}
-                        onCommentInputChange={(id, val) => setCommentInputs(prev => ({ ...prev, [id]: val }))}
-                        onAddComment={addComment}
-                        onDeleteComment={deleteComment}
-                        onToggleCompletion={toggleCompletion}
-                        isReadOnly={isArchived}
-                      />
-                    ))}
-                </div>
-
-                {candidates.some(c => currentJudge && c.scores[currentJudge]?.isCompleted) && (
-                  <div className="glass-card fade-in completed-section" style={{ marginTop: '2rem', padding: '1rem', background: 'rgba(34, 197, 94, 0.03)', border: '1px solid rgba(34, 197, 94, 0.1)' }}>
-                    <div 
-                      className="completed-toggle"
-                      onClick={() => setIsCompletedExpanded(!isCompletedExpanded)}
-                      style={{ 
-                        display: 'flex', 
-                        justifyContent: 'space-between', 
-                        alignItems: 'center', 
-                        cursor: 'pointer',
-                        padding: '0.5rem'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem' }}>
-                        <CheckCircle size={20} color="#22c55e" />
-                        <h3 style={{ fontSize: '1.2rem', color: '#22c55e' }}>
-                          심사 완료된 팀 ({candidates.filter(c => currentJudge && c.scores[currentJudge]?.isCompleted).length}팀)
-                        </h3>
+                    <form onSubmit={addCandidate} className="flex-column" style={{ gap: '1rem' }}>
+                      <div className="input-row" style={{ display: 'flex', gap: '1rem' }}>
+                        <input className="premium-input" placeholder="팀 이름" value={newCandidateName} onChange={(event) => setNewCandidateName(event.target.value)} />
+                        <input className="premium-input" placeholder="곡명" value={newSongTitle} onChange={(event) => setNewSongTitle(event.target.value)} />
                       </div>
-                      {isCompletedExpanded ? <ChevronUp size={20} color="#22c55e" /> : <ChevronDown size={20} color="#22c55e" />}
-                    </div>
-                    
-                    {isCompletedExpanded && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem', marginTop: '1.5rem' }}>
-                        {candidates
-                          .filter(c => currentJudge && c.scores[currentJudge]?.isCompleted)
-                          .map((candidate: Candidate) => (
-                            <CandidateScoreCard 
-                              key={candidate.id}
-                              candidate={candidate}
-                              selectedJudge={currentJudge!}
-                              activeAudition={activeAudition!}
-                              isObserver={isObserver}
-                              getJudgeTotal={getJudgeTotal}
-                              editingSongId={editingSongId}
-                              setEditingSongId={setEditingSongId}
-                              tempSongTitle={tempSongTitle}
-                              setTempSongTitle={setTempSongTitle}
-                              updateSongTitle={updateSongTitle}
-                              deleteCandidate={deleteCandidate}
-                              updateSimpleScore={updateSimpleScore}
-                              updateDetailScore={updateDetailScore}
-                              updateItemStrikes={updateItemStrikes}
-                              commentInput={commentInputs[candidate.id] || ''}
-                              isCommentExpanded={!!expandedComments[candidate.id]}
-                              onToggleComment={(id) => setExpandedComments(prev => ({ ...prev, [id]: !prev[id] }))}
-                              onCommentInputChange={(id, val) => setCommentInputs(prev => ({ ...prev, [id]: val }))}
-                              onAddComment={addComment}
-                              onDeleteComment={deleteComment}
-                              onToggleCompletion={toggleCompletion}
-                              isReadOnly={isArchived}
-                            />
-                          ))}
-                      </div>
-                    )}
+                      <button type="submit" className="premium-button" disabled={activeAudition.finalization.isFinalized}>
+                        팀 등록
+                      </button>
+                    </form>
                   </div>
                 )}
-              </div>
-            </section>
 
-            <div className="dashboard-sidepanel" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div className="glass-card active-judges-card" style={{ padding: '1rem', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.05)' }}>
-                <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.8rem', fontWeight: 500 }}>리더보드 반영 심사위원 선택</div>
-                <div className="active-judge-grid" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.8rem' }}>
-                  {activeAudition?.judges.filter(j => j.type !== 'observer').map(j => {
-                    const isActive = activeJudges.includes(j.name);
-                    return (
-                      <button 
-                        key={j.name}
-                        className={`active-judge-chip ${isActive ? 'active-judge-chip--active' : ''}`}
-                        onClick={() => {
-                          if (!activeAuditionId) return;
-                          const newActive = isActive 
-                            ? activeJudges.filter(aj => aj !== j.name)
-                            : [...activeJudges, j.name];
-                          firebaseService.updateActiveJudges(activeAuditionId, newActive);
-                        }}
-                        style={{
-                          padding: '0.5rem 1rem',
-                          borderRadius: '10px',
-                          fontSize: '0.85rem',
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                          transition: 'all 0.2s',
-                          border: '1px solid',
-                          borderColor: isActive ? 'var(--primary)' : 'rgba(255,255,255,0.1)',
-                          background: isActive ? 'rgba(99, 102, 241, 0.1)' : 'rgba(255,255,255,0.05)',
-                          color: isActive ? 'var(--primary)' : 'var(--text-muted)',
-                        }}
+                <div className="dashboard-workflow" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                  <h3
+                    className="dashboard-stage-title"
+                    style={{ fontSize: '1.4rem', borderLeft: '4px solid var(--primary)', paddingLeft: '1rem', marginBottom: '0.5rem' }}
+                  >
+                    {isObserver ? '실시간 참가 현황' : '채점 진행 중인 팀'}
+                  </h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                    {candidates
+                      .filter((candidate) => !currentJudge || !candidate.scores[currentJudge]?.isCompleted)
+                      .map((candidate) => {
+                        const isReadOnly = isCandidateReadOnly(candidate.id);
+
+                        return (
+                          <CandidateScoreCard
+                            key={candidate.id}
+                            candidate={candidate}
+                            selectedJudge={currentJudge}
+                            activeAudition={activeAudition}
+                            isObserver={isObserver}
+                            getJudgeTotal={getJudgeTotal}
+                            editingSongId={editingSongId}
+                            setEditingSongId={setEditingSongId}
+                            tempSongTitle={tempSongTitle}
+                            setTempSongTitle={setTempSongTitle}
+                            updateSongTitle={updateSongTitle}
+                            deleteCandidate={deleteCandidate}
+                            updateSimpleScore={updateSimpleScore}
+                            updateDetailScore={updateDetailScore}
+                            updateItemStrikes={updateItemStrikes}
+                            commentInput={commentInputs[candidate.id] || ''}
+                            isCommentExpanded={!!expandedComments[candidate.id]}
+                            onToggleComment={(id) => setExpandedComments((previous) => ({ ...previous, [id]: !previous[id] }))}
+                            onCommentInputChange={(id, value) => setCommentInputs((previous) => ({ ...previous, [id]: value }))}
+                            onAddComment={addComment}
+                            onDeleteComment={deleteComment}
+                            onToggleCompletion={toggleCompletion}
+                            isReadOnly={isReadOnly}
+                            readOnlyLabel={candidateReadOnlyLabel(candidate)}
+                          />
+                        );
+                      })}
+                  </div>
+
+                  {candidates.some((candidate) => currentJudge && candidate.scores[currentJudge]?.isCompleted) ? (
+                    <div
+                      className="glass-card fade-in completed-section"
+                      style={{ marginTop: '2rem', padding: '1rem', background: 'rgba(34, 197, 94, 0.03)', border: '1px solid rgba(34, 197, 94, 0.1)' }}
+                    >
+                      <div
+                        className="completed-toggle"
+                        onClick={() => setIsCompletedExpanded(!isCompletedExpanded)}
+                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', padding: '0.5rem' }}
                       >
-                        {j.name} {isActive ? 'ON' : 'OFF'}
-                      </button>
-                    );
-                  })}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem' }}>
+                          <CheckCircle size={20} color="#22c55e" />
+                          <h3 style={{ fontSize: '1.2rem', color: '#22c55e' }}>
+                            심사 완료된 팀 ({candidates.filter((candidate) => currentJudge && candidate.scores[currentJudge]?.isCompleted).length}팀)
+                          </h3>
+                        </div>
+                        {isCompletedExpanded ? <ChevronUp size={20} color="#22c55e" /> : <ChevronDown size={20} color="#22c55e" />}
+                      </div>
+
+                      {isCompletedExpanded ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem', marginTop: '1.5rem' }}>
+                          {candidates
+                            .filter((candidate) => currentJudge && candidate.scores[currentJudge]?.isCompleted)
+                            .map((candidate) => {
+                              const isReadOnly = isCandidateReadOnly(candidate.id);
+
+                              return (
+                                <CandidateScoreCard
+                                  key={candidate.id}
+                                  candidate={candidate}
+                                  selectedJudge={currentJudge}
+                                  activeAudition={activeAudition}
+                                  isObserver={isObserver}
+                                  getJudgeTotal={getJudgeTotal}
+                                  editingSongId={editingSongId}
+                                  setEditingSongId={setEditingSongId}
+                                  tempSongTitle={tempSongTitle}
+                                  setTempSongTitle={setTempSongTitle}
+                                  updateSongTitle={updateSongTitle}
+                                  deleteCandidate={deleteCandidate}
+                                  updateSimpleScore={updateSimpleScore}
+                                  updateDetailScore={updateDetailScore}
+                                  updateItemStrikes={updateItemStrikes}
+                                  commentInput={commentInputs[candidate.id] || ''}
+                                  isCommentExpanded={!!expandedComments[candidate.id]}
+                                  onToggleComment={(id) => setExpandedComments((previous) => ({ ...previous, [id]: !previous[id] }))}
+                                  onCommentInputChange={(id, value) => setCommentInputs((previous) => ({ ...previous, [id]: value }))}
+                                  onAddComment={addComment}
+                                  onDeleteComment={deleteComment}
+                                  onToggleCompletion={toggleCompletion}
+                                  isReadOnly={isReadOnly}
+                                  readOnlyLabel={candidateReadOnlyLabel(candidate)}
+                                />
+                              );
+                            })}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
+              </section>
+
+              <div className="dashboard-sidepanel" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <Leaderboard sortedCandidates={sortedCandidates} activeAudition={activeAudition} />
               </div>
-              <Leaderboard sortedCandidates={sortedCandidates} activeAudition={activeAudition!} />
+            </div>
+          </Suspense>
+        </div>
+      ) : null}
+
+      {selectedJudgeToAuth ? (
+        <PinModal
+          title={`${selectedJudgeToAuth.name} ${selectedJudgeToAuth.type !== 'observer' ? '심사위원' : ''}`}
+          onVerify={(pin) => handleJudgeAuth(selectedJudgeToAuth, pin)}
+          onClose={() => setSelectedJudgeToAuth(null)}
+        />
+      ) : null}
+
+      {isAdminPinModalOpen ? (
+        <PinModal
+          title={adminPinIntent === 'create' ? '새 오디션 생성' : adminPinIntent === 'settings' ? '관리자 설정' : '관리자 화면'}
+          onVerify={handleAdminAuth}
+          onClose={() => {
+            setIsAdminPinModalOpen(false);
+            setAdminPinIntent(null);
+          }}
+        />
+      ) : null}
+
+      <Suspense fallback={null}>
+        {isSettingsModalOpen && isAdmin && activeAudition ? (
+          <AuditionSettingsModal
+            audition={activeAudition}
+            candidateCount={candidates.length}
+            onSave={handleSaveSettings}
+            onDelete={handleMoveAuditionToTrash}
+            onClose={() => setIsSettingsModalOpen(false)}
+          />
+        ) : null}
+      </Suspense>
+
+      {isAddingAudition ? (
+        <ModalPortal>
+          <div className="modal-overlay-shell fade-in">
+            <div className="modal-surface modal-entrance" style={{ maxWidth: '520px' }}>
+              <button type="button" className="modal-close-button" onClick={() => setIsAddingAudition(false)} aria-label="새 오디션 생성 모달 닫기">
+                <X size={18} />
+              </button>
+
+              <div className="modal-content">
+                <div className="modal-header-row">
+                  <div className="modal-header-copy">
+                    <span className="modal-kicker">
+                      <Plus size={14} />
+                      새 오디션
+                    </span>
+                    <h2>새 오디션 생성</h2>
+                  </div>
+                </div>
+
+                <form onSubmit={handleCreateAudition}>
+                  <div className="modal-section" style={{ marginBottom: '1rem' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                      <div>
+                        <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)' }}>오디션 이름</label>
+                        <input
+                          autoFocus
+                          className="premium-input"
+                          placeholder="예: 2026 상반기 밴드 오디션"
+                          value={newAuditionName}
+                          onChange={(event) => setNewAuditionName(event.target.value)}
+                        />
+                      </div>
+                      <div className="modal-muted-card" style={{ padding: '0.9rem 1rem' }}>
+                        <p className="modal-summary-label">관리자 인증 상태</p>
+                        <p style={{ fontWeight: 700 }}>관리자 PIN 확인 완료</p>
+                        <p style={{ marginTop: '0.35rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                          새 오디션 생성은 관리자 인증 이후에만 진행할 수 있습니다.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="modal-action-bar" style={{ marginTop: 0, paddingTop: 0, borderTop: 'none' }}>
+                    <button type="button" className="premium-button secondary-btn" style={{ flex: 1 }} onClick={() => setIsAddingAudition(false)}>
+                      취소
+                    </button>
+                    <button type="submit" className="premium-button" style={{ flex: 1 }} disabled={!newAuditionName.trim()}>
+                      생성하기
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
           </div>
+        </ModalPortal>
+      ) : null}
 
-          <div className="dashboard-stats-section" style={{ marginTop: '3rem' }}>
-            <StatisticsPanel candidates={candidates} activeAudition={activeAudition || null} />
-          </div>
-        </div>
-      )}
-      <footer style={{ 
-        marginTop: '4rem', padding: '2rem 0', 
-        borderTop: '1px solid rgba(255,255,255,0.05)',
-        textAlign: 'center', color: 'rgba(255,255,255,0.3)',
-        fontSize: '0.9rem', letterSpacing: '1px'
-      }}>
-        <p>Developed by <strong>Kim Junmo</strong></p>
+      <footer
+        style={{
+          marginTop: '4rem',
+          padding: '2rem 0',
+          borderTop: '1px solid rgba(255,255,255,0.05)',
+          textAlign: 'center',
+          color: 'rgba(255,255,255,0.3)',
+          fontSize: '0.9rem',
+          letterSpacing: '1px',
+        }}
+      >
+        <p>
+          Developed by <strong>Kim Junmo</strong>
+        </p>
         <p style={{ fontSize: '0.75rem', marginTop: '0.5rem', opacity: 0.5 }}>© 2024 Audition Master. All rights reserved.</p>
       </footer>
     </div>

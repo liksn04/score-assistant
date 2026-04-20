@@ -16,29 +16,64 @@ import type { Candidate, Audition } from '../../types';
 import { calculateStats } from '../../utils/statsUtils';
 import { exportToExcel } from '../../utils/exportUtils';
 import { firebaseService } from '../../api/firebaseService';
+import { useToast } from '../../context/ToastContext.tsx';
+import { useConfirmDialog } from '../../context/ConfirmDialogContext.tsx';
 
 interface StatisticsPanelProps {
   candidates: Candidate[];
   activeAudition: Audition | null;
+  embedded?: boolean;
 }
 
-const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ candidates, activeAudition }) => {
+const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ candidates, activeAudition, embedded = false }) => {
   const stats = activeAudition ? calculateStats(candidates, activeAudition) : null;
+  const { showToast } = useToast();
+  const { confirm } = useConfirmDialog();
 
   if (!stats || !activeAudition) return null;
 
-  const handleExport = () => {
-    exportToExcel(candidates, activeAudition);
+  const handleExport = async () => {
+    try {
+      await exportToExcel(candidates, activeAudition);
+      showToast({
+        kind: 'success',
+        title: '통계 내보내기 완료',
+        message: '심사 통계 보고서를 다운로드했습니다.',
+      });
+    } catch (error) {
+      showToast({
+        kind: 'error',
+        title: '통계 내보내기 실패',
+        message: error instanceof Error ? error.message : '통계 파일 생성 중 오류가 발생했습니다.',
+      });
+    }
   };
 
   const handleToggleArchive = async () => {
     const newStatus = activeAudition.status === 'active' ? 'archived' : 'active';
-    if (window.confirm(`오디션을 ${newStatus === 'archived' ? '종료(아카이브)' : '활성화'} 하시겠습니까?`)) {
-      try {
-        await firebaseService.updateAuditionStatus(activeAudition.id, newStatus);
-      } catch (error) {
-        alert("상태 변경 중 오류가 발생했습니다.");
-      }
+    const shouldToggle = await confirm({
+      title: `오디션을 ${newStatus === 'archived' ? '종료' : '활성화'}할까요?`,
+      description: newStatus === 'archived' ? '종료된 오디션은 읽기 전용으로 전환됩니다.' : '다시 활성 오디션으로 복구합니다.',
+      confirmText: newStatus === 'archived' ? '종료' : '활성화',
+    });
+
+    if (!shouldToggle) {
+      return;
+    }
+
+    try {
+      await firebaseService.updateAuditionStatus(activeAudition.id, newStatus);
+      showToast({
+        kind: 'success',
+        title: '상태 변경 완료',
+        message: newStatus === 'archived' ? '오디션을 종료했습니다.' : '오디션을 활성화했습니다.',
+      });
+    } catch (error) {
+      showToast({
+        kind: 'error',
+        title: '상태 변경 실패',
+        message: error instanceof Error ? error.message : '상태 변경 중 오류가 발생했습니다.',
+      });
     }
   };
 
@@ -54,33 +89,41 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ candidates, activeAud
               <BarChart3 color="var(--primary)" size={28} />
               <h2 className="statistics-panel-title" style={{ fontSize: '1.8rem', fontWeight: 700, margin: 0 }}>심사 통계 분석</h2>
             </div>
-            <p style={{ color: 'var(--text-muted)', fontSize: '1rem', fontWeight: 300 }}>심사위원별 성향과 후보자 점수 일관성 데이터를 분석합니다.</p>
+            <p style={{ color: 'var(--text-muted)', fontSize: '1rem', fontWeight: 300 }}>
+              {embedded
+                ? '리더보드 운영에 필요한 심사위원 평균 점수와 후보자별 표준편차를 다시 확인합니다.'
+                : '심사위원별 성향과 후보자 점수 일관성 데이터를 분석합니다.'}
+            </p>
           </div>
-          
-          <div className="statistics-panel-actions" style={{ display: 'flex', gap: '0.8rem', flexWrap: 'wrap' }}>
-            <button 
-              onClick={handleExport}
-              className="premium-button"
-              style={{ padding: '0.6rem 1.2rem', fontSize: '0.9rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)' }}
-            >
-              <Download size={18} /> 엑셀 내보내기
-            </button>
-            
-            <button 
-              onClick={handleToggleArchive}
-              className="premium-button"
-              style={{ 
-                padding: '0.6rem 1.2rem', 
-                fontSize: '0.9rem',
-                background: activeAudition.status === 'archived' ? 'rgba(234, 179, 8, 0.1)' : 'var(--primary)',
-                color: activeAudition.status === 'archived' ? '#eab308' : 'white',
-                border: activeAudition.status === 'archived' ? '1px solid rgba(234, 179, 8, 0.3)' : 'none'
-              }}
-            >
-              {activeAudition.status === 'archived' ? <Unlock size={18} /> : <Archive size={18} />}
-              {activeAudition.status === 'archived' ? '오디션 활성화' : '오디션 종료'}
-            </button>
-          </div>
+
+          {!embedded ? (
+            <div className="statistics-panel-actions" style={{ display: 'flex', gap: '0.8rem', flexWrap: 'wrap' }}>
+              <button
+                onClick={() => {
+                  void handleExport();
+                }}
+                className="premium-button"
+                style={{ padding: '0.6rem 1.2rem', fontSize: '0.9rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)' }}
+              >
+                <Download size={18} /> 엑셀 내보내기
+              </button>
+
+              <button
+                onClick={handleToggleArchive}
+                className="premium-button"
+                style={{
+                  padding: '0.6rem 1.2rem',
+                  fontSize: '0.9rem',
+                  background: activeAudition.status === 'archived' ? 'rgba(234, 179, 8, 0.1)' : 'var(--primary)',
+                  color: activeAudition.status === 'archived' ? '#eab308' : 'white',
+                  border: activeAudition.status === 'archived' ? '1px solid rgba(234, 179, 8, 0.3)' : 'none',
+                }}
+              >
+                {activeAudition.status === 'archived' ? <Unlock size={18} /> : <Archive size={18} />}
+                {activeAudition.status === 'archived' ? '오디션 활성화' : '오디션 종료'}
+              </button>
+            </div>
+          ) : null}
         </div>
       </div>
 

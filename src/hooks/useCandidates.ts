@@ -1,77 +1,64 @@
-import { useState, useEffect, useMemo } from 'react';
-import { collection, query, onSnapshot, where } from 'firebase/firestore';
+import { useEffect, useMemo, useState } from 'react';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import type { Candidate, Audition } from '../types';
-import { getJudgeScore } from '../utils/statsUtils';
+import { mapCandidateRecord } from '../utils/auditionModel.ts';
+import { rankCandidates } from '../utils/rankingUtils.ts';
 
 export const useCandidates = (audition: Audition | null) => {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // 실시간 순위 데이터 (메모이제이션)
   const sortedCandidates = useMemo(() => {
-    if (!audition) return [];
-    const activeJudges = audition.activeJudges || [];
-    
-    return [...candidates].map(c => {
-      let total = 0;
-      let count = 0;
-      
-      activeJudges.forEach(j => {
-        const score = getJudgeScore(c, j, audition);
-        if (score !== null) {
-          total += score;
-          count++;
-        }
-      });
+    if (!audition) {
+      return [];
+    }
 
-      const average = count > 0 ? Number((total / count).toFixed(2)) : 0;
-      
-      return {
-        ...c,
-        total, // 화면 표시용으로 덮어씀
-        average // 화면 표시용으로 덮어씀
-      };
-    }).sort((a, b) => {
-      if (b.average !== a.average) return b.average - a.average;
-      return a.name.localeCompare(b.name);
-    });
+    return rankCandidates(candidates, audition);
   }, [candidates, audition]);
 
   useEffect(() => {
     if (!audition?.id) {
-      setCandidates([]);
-      setIsLoading(false);
       return;
     }
 
-    const q = query(
-      collection(db, 'candidates'),
-      where('auditionId', '==', audition.id)
-    );
+    const candidatesQuery = query(collection(db, 'candidates'), where('auditionId', '==', audition.id));
+    const unsubscribe = onSnapshot(
+      candidatesQuery,
+      (snapshot) => {
+        const data = snapshot.docs.map((candidateSnapshot) => mapCandidateRecord(candidateSnapshot.id, candidateSnapshot.data()));
+        const fixedData = [...data].sort((left, right) => {
+          const leftTime =
+            typeof left.createdAt === 'object' && left.createdAt !== null && 'seconds' in left.createdAt
+              ? left.createdAt.seconds ?? 0
+              : 0;
+          const rightTime =
+            typeof right.createdAt === 'object' && right.createdAt !== null && 'seconds' in right.createdAt
+              ? right.createdAt.seconds ?? 0
+              : 0;
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Candidate[];
-      
-      const fixedData = [...data].sort((a, b) => {
-        const timeA = a.createdAt?.seconds || 0;
-        const timeB = b.createdAt?.seconds || 0;
-        if (timeA !== timeB) return timeA - timeB;
-        return a.id.localeCompare(b.id);
-      });
-      
-      setCandidates(fixedData);
-      setIsLoading(false);
-    }, (error) => {
-      console.error("Firestore 실시간 연결 오류:", error);
-      setIsLoading(false);
-    });
+          if (leftTime !== rightTime) {
+            return leftTime - rightTime;
+          }
+
+          return left.id.localeCompare(right.id);
+        });
+
+        setCandidates(fixedData);
+        setIsLoading(false);
+      },
+      (error) => {
+        console.error('Firestore 실시간 연결 오류:', error);
+        setIsLoading(false);
+      },
+    );
 
     return () => unsubscribe();
   }, [audition?.id]);
 
-  return { candidates, sortedCandidates, isLoading };
+  return {
+    candidates: audition?.id ? candidates : [],
+    sortedCandidates,
+    isLoading: audition?.id ? isLoading : false,
+  };
 };

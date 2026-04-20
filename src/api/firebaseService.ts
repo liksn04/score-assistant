@@ -6,10 +6,26 @@ import {
   deleteDoc, 
   serverTimestamp,
   arrayUnion,
-  arrayRemove
+  arrayRemove,
+  getDocs,
+  query,
+  where,
+  writeBatch
 } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import type { Candidate, Audition, JudgeConfig } from '../types';
+
+const FIRESTORE_DELETE_BATCH_SIZE = 450;
+
+const chunkArray = <T,>(items: T[], chunkSize: number) => {
+  const chunks: T[][] = [];
+
+  for (let index = 0; index < items.length; index += chunkSize) {
+    chunks.push(items.slice(index, index + chunkSize));
+  }
+
+  return chunks;
+};
 
 /**
  * 전체 심사위원 점수를 기반으로 총점과 평균을 계산하는 내부 유틸리티
@@ -99,6 +115,30 @@ export const firebaseService = {
       dropCount,
       updatedAt: serverTimestamp()
     });
+  },
+
+  async deleteAudition(id: string) {
+    if (!id.trim()) {
+      throw new Error('삭제할 오디션 ID가 유효하지 않습니다.');
+    }
+
+    const auditionRef = doc(db, 'auditions', id);
+    const candidateSnapshot = await getDocs(
+      query(collection(db, 'candidates'), where('auditionId', '==', id))
+    );
+    const refsToDelete = [...candidateSnapshot.docs.map((candidateDoc) => candidateDoc.ref), auditionRef];
+
+    // Edge case: 참가자 수가 많아도 Firestore 배치 한도를 넘지 않도록 나눠서 삭제합니다.
+    // Edge case: 중간 실패 시 오디션 문서가 먼저 사라져 고아 참가자가 남지 않도록 오디션은 마지막 chunk에 포함됩니다.
+    for (const refChunk of chunkArray(refsToDelete, FIRESTORE_DELETE_BATCH_SIZE)) {
+      const batch = writeBatch(db);
+
+      refChunk.forEach((ref) => {
+        batch.delete(ref);
+      });
+
+      await batch.commit();
+    }
   },
 
   // 참가자 추가

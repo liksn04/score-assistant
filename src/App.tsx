@@ -105,6 +105,21 @@ const App: React.FC = () => {
     }
   };
 
+  const handleDeleteAudition = async () => {
+    if (!activeAuditionId) {
+      throw new Error('삭제할 오디션이 선택되지 않았습니다.');
+    }
+
+    const nextAuditionId = auditions.find((audition) => audition.id !== activeAuditionId)?.id || null;
+
+    await firebaseService.deleteAudition(activeAuditionId);
+
+    setIsSettingsModalOpen(false);
+    setIsAdminPinModalOpen(false);
+    setSelectedJudgeToAuth(null);
+    setActiveAuditionId(nextAuditionId);
+  };
+
   // 헬퍼: 현재 오디션 기반 단순 총점 가져오기
   const getJudgeTotal = (candidate: Candidate, judgeName: string) => {
     if (!activeAudition) return 0;
@@ -265,7 +280,9 @@ const App: React.FC = () => {
           {isSettingsModalOpen && activeAudition && (
             <AuditionSettingsModal 
               audition={activeAudition}
+              candidateCount={candidates.length}
               onSave={handleSaveSettings}
+              onDelete={handleDeleteAudition}
               onClose={() => setIsSettingsModalOpen(false)}
             />
           )}

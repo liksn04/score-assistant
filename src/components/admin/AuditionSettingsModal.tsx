@@ -4,14 +4,24 @@ import type { Audition, JudgeConfig, JudgeType } from '../../types';
 
 interface AuditionSettingsModalProps {
   audition: Audition;
+  candidateCount: number;
   onSave: (judges: JudgeConfig[], dropCount: number) => Promise<void>;
+  onDelete: () => Promise<void>;
   onClose: () => void;
 }
 
-export const AuditionSettingsModal: React.FC<AuditionSettingsModalProps> = ({ audition, onSave, onClose }) => {
+export const AuditionSettingsModal: React.FC<AuditionSettingsModalProps> = ({
+  audition,
+  candidateCount,
+  onSave,
+  onDelete,
+  onClose
+}) => {
   const [judges, setJudges] = useState<JudgeConfig[]>(audition.judges || []);
   const [dropCount, setDropCount] = useState<number>(audition.dropCount || 0);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
 
   const handleAddJudge = () => {
     setJudges([
@@ -65,10 +75,37 @@ export const AuditionSettingsModal: React.FC<AuditionSettingsModalProps> = ({ au
     try {
       await onSave(judges, dropCount);
       onClose();
-    } catch (e) {
+    } catch {
       alert("오디션 설정 저장 중 오류가 발생했습니다.");
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const isDeleteReady = deleteConfirmText.trim() === audition.name.trim();
+
+  const handleDelete = async () => {
+    if (!isDeleteReady) {
+      alert("삭제하려면 오디션 이름을 정확히 입력해주세요.");
+      return;
+    }
+
+    const candidateMessage = candidateCount > 0
+      ? `참가자 ${candidateCount}팀의 점수와 코멘트도 함께 삭제됩니다.`
+      : '현재 연결된 참가자는 없지만, 오디션 설정은 완전히 삭제됩니다.';
+
+    if (!window.confirm(`"${audition.name}" 오디션을 삭제하시겠습니까?\n${candidateMessage}\n이 작업은 되돌릴 수 없습니다.`)) {
+      return;
+    }
+
+    setIsDeleting(true);
+
+    try {
+      await onDelete();
+    } catch {
+      alert("오디션 삭제 중 오류가 발생했습니다.");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -250,11 +287,69 @@ export const AuditionSettingsModal: React.FC<AuditionSettingsModalProps> = ({ au
         </section>
 
         <div style={{ marginTop: '3rem', display: 'flex', gap: '1rem' }}>
-          <button className="premium-button secondary-btn" style={{ flex: 1 }} onClick={onClose} disabled={isSaving}>취소</button>
-          <button className="premium-button" style={{ flex: 2 }} onClick={handleSubmit} disabled={isSaving}>
+          <button className="premium-button secondary-btn" style={{ flex: 1 }} onClick={onClose} disabled={isSaving || isDeleting}>취소</button>
+          <button className="premium-button" style={{ flex: 2 }} onClick={handleSubmit} disabled={isSaving || isDeleting}>
             {isSaving ? '저장 중...' : '설정 저장하기'}
           </button>
         </div>
+
+        <section style={{
+          marginTop: '1.5rem',
+          background: 'rgba(127, 29, 29, 0.18)',
+          border: '1px solid rgba(244, 63, 94, 0.22)',
+          borderRadius: '16px',
+          padding: '1.5rem'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.8rem' }}>
+            <Trash2 size={18} color="#f87171" />
+            <h3 style={{ fontSize: '1.1rem', color: '#fecaca' }}>오디션 삭제</h3>
+          </div>
+          <p style={{ color: 'rgba(255,255,255,0.82)', fontSize: '0.95rem', marginBottom: '0.6rem' }}>
+            실수로 생성한 오디션을 정리할 때만 사용하세요.
+          </p>
+          <p style={{ color: 'rgba(255,255,255,0.72)', fontSize: '0.9rem', marginBottom: '0.6rem' }}>
+            {candidateCount > 0
+              ? `참가자 ${candidateCount}팀의 점수, 완료 상태, 코멘트까지 함께 삭제됩니다.`
+              : '현재 연결된 참가자는 없지만, 오디션 정보와 심사위원 설정은 완전히 삭제됩니다.'}
+          </p>
+          <p style={{ color: '#fecaca', fontSize: '0.85rem', marginBottom: '1rem' }}>
+            삭제하려면 오디션 이름을 정확히 입력하세요: {audition.name}
+          </p>
+          <div style={{ display: 'flex', gap: '0.8rem', flexWrap: 'wrap' }}>
+            <input
+              className="premium-input"
+              placeholder={audition.name}
+              value={deleteConfirmText}
+              onChange={(e) => setDeleteConfirmText(e.target.value)}
+              disabled={isSaving || isDeleting}
+              style={{
+                flex: 1,
+                minWidth: '240px',
+                borderColor: 'rgba(244, 63, 94, 0.24)',
+                background: 'rgba(15, 23, 42, 0.7)'
+              }}
+            />
+            <button
+              onClick={handleDelete}
+              disabled={!isDeleteReady || isSaving || isDeleting}
+              style={{
+                background: isDeleteReady ? 'linear-gradient(135deg, #ef4444, #f97316)' : 'rgba(255,255,255,0.08)',
+                color: isDeleteReady ? 'white' : 'rgba(255,255,255,0.45)',
+                border: 'none',
+                borderRadius: '12px',
+                padding: '0.8rem 1.2rem',
+                fontWeight: 700,
+                cursor: isDeleteReady && !isSaving && !isDeleting ? 'pointer' : 'not-allowed',
+                minWidth: '140px'
+              }}
+            >
+              {isDeleting ? '삭제 중...' : '오디션 삭제'}
+            </button>
+          </div>
+          <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: '0.8rem', marginTop: '0.8rem' }}>
+            다른 오디션이 없으면 삭제 직후 기본 오디션이 자동으로 다시 생성됩니다.
+          </p>
+        </section>
       </div>
     </div>
   );

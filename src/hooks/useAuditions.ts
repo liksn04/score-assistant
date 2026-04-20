@@ -59,8 +59,17 @@ export const useAuditions = () => {
         const newAudition = await firebaseService.createAudition("기본 오디션", "000000");
         setActiveAuditionId(newAudition.id);
         await migrateLegacyCandidates(newAudition.id);
-      } else if (!activeAuditionId && data.length > 0) {
-        setActiveAuditionId(data[0].id);
+      } else if (data.length > 0) {
+        // Edge case: 현재 선택된 오디션이 삭제되었거나 저장된 값이 오래된 경우 가장 최신 오디션으로 복구합니다.
+        const hasActiveAudition = activeAuditionId
+          ? data.some((audition) => audition.id === activeAuditionId)
+          : false;
+
+        if (!hasActiveAudition) {
+          setActiveAuditionId(data[0].id);
+        }
+      } else if (activeAuditionId) {
+        setActiveAuditionId(null);
       }
       
       setIsLoading(false);
@@ -72,6 +81,8 @@ export const useAuditions = () => {
   useEffect(() => {
     if (activeAuditionId) {
       localStorage.setItem('activeAuditionId', activeAuditionId);
+    } else {
+      localStorage.removeItem('activeAuditionId');
     }
   }, [activeAuditionId]);
 

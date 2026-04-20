@@ -232,7 +232,7 @@ const App: React.FC = () => {
                 </div>
                 <h3 style={{ fontSize: '1.6rem', marginBottom: '0.5rem', fontWeight: 600 }}>{judge.name} {judge.type !== 'observer' && '심사위원'}</h3>
                 <p style={{ color: 'var(--primary)', fontSize: '0.9rem', fontWeight: 'bold' }}>
-                  {judge.type === 'observer' ? '모니터링 하기 &rarr;' : '심사 시작하기 &rarr;'}
+                  {judge.type === 'observer' ? '모니터링 하기 →' : '심사 시작하기 →'}
                 </p>
               </div>
             ))}

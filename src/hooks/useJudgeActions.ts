@@ -6,6 +6,7 @@ import { useToast } from '../context/ToastContext.tsx';
 import { canEditCandidateScore } from '../utils/rankingUtils.ts';
 
 const COMMENT_MAX_LENGTH = 500;
+type MutationFeedbackMode = 'silent' | 'toast';
 
 export const useJudgeActions = (candidates: Candidate[], audition: Audition | null, selectedJudge: string | null) => {
   const [newCandidateName, setNewCandidateName] = useState('');
@@ -22,18 +23,22 @@ export const useJudgeActions = (candidates: Candidate[], audition: Audition | nu
   const judgeConfig = audition?.judges?.find((judge) => judge.name === selectedJudge);
   const isObserver = judgeConfig?.type === 'observer';
 
-  const withToast = async <T,>(
+  const runMutation = async <T,>(
     key: string,
     title: string,
     runner: () => Promise<T>,
-    successMessage: string,
+    mode: MutationFeedbackMode = 'silent',
+    successMessage?: string,
   ) => {
-    const toastId = showToast({
-      kind: 'loading',
-      title,
-      message: `${title}을 처리하고 있습니다.`,
-      dedupeKey: key,
-    });
+    const toastId =
+      mode === 'toast'
+        ? showToast({
+            kind: 'loading',
+            title,
+            message: `${title}을 처리하고 있습니다.`,
+            dedupeKey: key,
+          })
+        : null;
 
     setPendingMutation({
       key,
@@ -42,18 +47,28 @@ export const useJudgeActions = (candidates: Candidate[], audition: Audition | nu
 
     try {
       const result = await runner();
-      updateToast(toastId, {
-        kind: 'success',
-        title: `${title} 완료`,
-        message: successMessage,
-      });
+      if (mode === 'toast' && toastId) {
+        updateToast(toastId, {
+          kind: 'success',
+          title: `${title} 완료`,
+          message: successMessage ?? `${title}을 완료했습니다.`,
+        });
+      }
       return result;
     } catch (error) {
-      updateToast(toastId, {
-        kind: 'error',
-        title: `${title} 실패`,
-        message: error instanceof Error ? error.message : `${title} 중 오류가 발생했습니다.`,
-      });
+      if (mode === 'toast' && toastId) {
+        updateToast(toastId, {
+          kind: 'error',
+          title: `${title} 실패`,
+          message: error instanceof Error ? error.message : `${title} 중 오류가 발생했습니다.`,
+        });
+      } else {
+        showToast({
+          kind: 'error',
+          title: `${title} 실패`,
+          message: error instanceof Error ? error.message : `${title} 중 오류가 발생했습니다.`,
+        });
+      }
       throw error;
     } finally {
       setPendingMutation({
@@ -106,7 +121,7 @@ export const useJudgeActions = (candidates: Candidate[], audition: Audition | nu
       return;
     }
 
-    await withToast(
+    await runMutation(
       'candidate-create',
       '팀 등록',
       async () => {
@@ -114,7 +129,7 @@ export const useJudgeActions = (candidates: Candidate[], audition: Audition | nu
         setNewCandidateName('');
         setNewSongTitle('');
       },
-      '새 참가팀을 등록했습니다.',
+      'silent',
     );
   };
 
@@ -147,11 +162,11 @@ export const useJudgeActions = (candidates: Candidate[], audition: Audition | nu
       return;
     }
 
-    await withToast(
+    await runMutation(
       `score-simple-${candidateId}`,
       '점수 저장',
       () => firebaseService.updateSimpleScore(candidate, selectedJudge, score, audition),
-      `${candidate.name} 팀의 총점을 저장했습니다.`,
+      'silent',
     );
   };
 
@@ -187,11 +202,11 @@ export const useJudgeActions = (candidates: Candidate[], audition: Audition | nu
       return;
     }
 
-    await withToast(
+    await runMutation(
       `score-detail-${candidateId}-${item}`,
       '점수 저장',
       () => firebaseService.updateDetailScore(candidate, selectedJudge, item, score, audition),
-      `${candidate.name} 팀의 ${item} 점수를 저장했습니다.`,
+      'silent',
     );
   };
 
@@ -220,14 +235,14 @@ export const useJudgeActions = (candidates: Candidate[], audition: Audition | nu
       return;
     }
 
-    await withToast(
+    await runMutation(
       `comment-add-${candidateId}`,
       '코멘트 저장',
       async () => {
         await firebaseService.addComment(candidate, selectedJudge, content, audition);
         setCommentInputs((previous) => ({ ...previous, [candidateId]: '' }));
       },
-      `${candidate.name} 팀의 코멘트를 저장했습니다.`,
+      'silent',
     );
   };
 
@@ -252,11 +267,11 @@ export const useJudgeActions = (candidates: Candidate[], audition: Audition | nu
       return;
     }
 
-    await withToast(
+    await runMutation(
       `comment-delete-${candidateId}-${comment.id}`,
       '코멘트 삭제',
       () => firebaseService.deleteComment(candidate, comment, audition),
-      `${candidate.name} 팀의 코멘트를 삭제했습니다.`,
+      'silent',
     );
   };
 
@@ -273,11 +288,11 @@ export const useJudgeActions = (candidates: Candidate[], audition: Audition | nu
     const currentItemStrikes = candidate.scores[selectedJudge]?.itemStrikes || {};
     const newValue = Math.max(0, (currentItemStrikes[item] || 0) + increment);
 
-    await withToast(
+    await runMutation(
       `strike-update-${candidateId}-${item}`,
       '표시 저장',
       () => firebaseService.updateItemStrikes(candidate, selectedJudge, item, newValue, audition),
-      `${candidate.name} 팀의 표시를 갱신했습니다.`,
+      'silent',
     );
   };
 
@@ -291,11 +306,11 @@ export const useJudgeActions = (candidates: Candidate[], audition: Audition | nu
       return;
     }
 
-    await withToast(
+    await runMutation(
       `song-update-${candidateId}`,
       '곡명 저장',
       () => firebaseService.updateSongTitle(candidate, nextTitle, audition),
-      `${candidate.name} 팀의 곡명을 저장했습니다.`,
+      'silent',
     );
   };
 
@@ -320,11 +335,11 @@ export const useJudgeActions = (candidates: Candidate[], audition: Audition | nu
       return;
     }
 
-    await withToast(
+    await runMutation(
       `candidate-delete-${candidateId}`,
       '팀 삭제',
       () => firebaseService.deleteCandidate(candidate, audition),
-      `${name} 팀을 삭제했습니다.`,
+      'silent',
     );
   };
 
@@ -365,11 +380,11 @@ export const useJudgeActions = (candidates: Candidate[], audition: Audition | nu
       }
     }
 
-    await withToast(
+    await runMutation(
       `completion-toggle-${candidateId}`,
       currentStatus ? '완료 취소' : '완료 저장',
       () => firebaseService.toggleJudgeCompletion(candidate, selectedJudge, currentStatus, audition),
-      currentStatus ? `${candidate.name} 팀의 완료 상태를 취소했습니다.` : `${candidate.name} 팀을 완료 처리했습니다.`,
+      'silent',
     );
   };
 

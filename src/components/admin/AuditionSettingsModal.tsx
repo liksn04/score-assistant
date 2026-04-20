@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { X, Plus, Trash2, Settings, Users, ArrowRight } from 'lucide-react';
-import type { Audition, JudgeConfig, JudgeType } from '../../types';
+import { AlertTriangle, ArrowRight, BadgeCheck, Plus, Settings, Trash2, Users, X } from 'lucide-react';
+import type { Audition, Criterion, JudgeConfig, JudgeType } from '../../types';
+import ModalPortal from '../common/ModalPortal';
 
 interface AuditionSettingsModalProps {
   audition: Audition;
@@ -10,83 +11,201 @@ interface AuditionSettingsModalProps {
   onClose: () => void;
 }
 
+type EditableCriterion = Criterion & { localId: string };
+type EditableJudgeConfig = Omit<JudgeConfig, 'criteria'> & { localId: string; criteria?: EditableCriterion[] };
+
+const createLocalId = () =>
+  globalThis.crypto?.randomUUID?.() ?? `draft-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+const createEditableCriterion = (criterion?: Partial<Criterion>): EditableCriterion => ({
+  localId: createLocalId(),
+  item: criterion?.item ?? '항목 1',
+  maxScore: criterion?.maxScore ?? 100,
+});
+
+const createDefaultCriteria = (): EditableCriterion[] => [createEditableCriterion()];
+
+const toEditableCriteria = (criteria?: Criterion[]): EditableCriterion[] =>
+  criteria && criteria.length > 0
+    ? criteria.map((criterion) => createEditableCriterion(criterion))
+    : createDefaultCriteria();
+
+const JUDGE_TYPE_LABELS: Record<JudgeType, string> = {
+  detail: '항목별 세부 평가',
+  simple: '단순 총점 평가',
+  observer: '참관자 (읽기 전용)',
+};
+
+const toEditableJudge = (judge: JudgeConfig, index: number): EditableJudgeConfig => ({
+  localId: createLocalId(),
+  name: judge.name || `심사위원 ${index + 1}`,
+  pin: judge.pin || '123456',
+  type: judge.type,
+  criteria: judge.type === 'detail' ? toEditableCriteria(judge.criteria) : undefined,
+});
+
+const createDefaultJudge = (index: number): EditableJudgeConfig => ({
+  localId: createLocalId(),
+  name: `심사위원 ${index + 1}`,
+  pin: '123456',
+  type: 'detail',
+  criteria: createDefaultCriteria(),
+});
+
 export const AuditionSettingsModal: React.FC<AuditionSettingsModalProps> = ({
   audition,
   candidateCount,
   onSave,
   onDelete,
-  onClose
+  onClose,
 }) => {
-  const [judges, setJudges] = useState<JudgeConfig[]>(audition.judges || []);
+  const [judges, setJudges] = useState<EditableJudgeConfig[]>(() => (audition.judges || []).map(toEditableJudge));
   const [dropCount, setDropCount] = useState<number>(audition.dropCount || 0);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
 
+  const isDeleteReady = deleteConfirmText.trim() === audition.name.trim();
+
+  const updateJudgeAt = (index: number, updater: (judge: EditableJudgeConfig) => EditableJudgeConfig) => {
+    setJudges((previousJudges) =>
+      previousJudges.map((judge, judgeIndex) => (judgeIndex === index ? updater(judge) : judge)),
+    );
+  };
+
   const handleAddJudge = () => {
-    setJudges([
-      ...judges,
-      {
-        name: `심사위원 ${judges.length + 1}`,
-        pin: '123456',
-        type: 'detail',
-        criteria: [{ item: '항목 1', maxScore: 100 }]
-      }
-    ]);
+    setJudges((previousJudges) => [...previousJudges, createDefaultJudge(previousJudges.length)]);
   };
 
   const handleRemoveJudge = (index: number) => {
-    const newJudges = [...judges];
-    newJudges.splice(index, 1);
-    setJudges(newJudges);
+    setJudges((previousJudges) => previousJudges.filter((_, judgeIndex) => judgeIndex !== index));
   };
 
-  const handleChangeJudge = (index: number, field: keyof JudgeConfig, value: any) => {
-    const newJudges = [...judges];
-    newJudges[index] = { ...newJudges[index], [field]: value };
-    setJudges(newJudges);
+  const handleChangeJudge = (index: number, field: 'name' | 'pin' | 'type', value: string) => {
+    updateJudgeAt(index, (judge) => {
+      if (field === 'type') {
+        const nextType = value as JudgeType;
+
+        if (nextType !== 'detail') {
+          const { criteria: _criteria, ...judgeWithoutCriteria } = judge;
+
+          return {
+            ...judgeWithoutCriteria,
+            type: nextType,
+          };
+        }
+
+        return {
+          ...judge,
+          type: nextType,
+          criteria: judge.criteria && judge.criteria.length > 0 ? judge.criteria : createDefaultCriteria(),
+        };
+      }
+
+      return { ...judge, [field]: value };
+    });
   };
 
   const handleAddCriterion = (judgeIndex: number) => {
-    const newJudges = [...judges];
-    const judge = newJudges[judgeIndex];
-    if (!judge.criteria) judge.criteria = [];
-    judge.criteria.push({ item: '새 항목', maxScore: 20 });
-    setJudges(newJudges);
+    updateJudgeAt(judgeIndex, (judge) => ({
+      ...judge,
+      criteria: [...(judge.criteria ?? []), createEditableCriterion({ item: '새 항목', maxScore: 20 })],
+    }));
   };
 
-  const handleRemoveCriterion = (judgeIndex: number, cIndex: number) => {
-    const newJudges = [...judges];
-    newJudges[judgeIndex].criteria?.splice(cIndex, 1);
-    setJudges(newJudges);
+  const handleRemoveCriterion = (judgeIndex: number, criterionIndex: number) => {
+    updateJudgeAt(judgeIndex, (judge) => ({
+      ...judge,
+      criteria: (judge.criteria ?? []).filter((_, index) => index !== criterionIndex),
+    }));
   };
 
-  const handleChangeCriterion = (judgeIndex: number, cIndex: number, field: 'item' | 'maxScore', value: any) => {
-    const newJudges = [...judges];
-    const criteria = newJudges[judgeIndex].criteria;
-    if (criteria && criteria[cIndex]) {
-      criteria[cIndex] = { ...criteria[cIndex], [field]: value };
-    }
-    setJudges(newJudges);
+  const handleChangeCriterion = (
+    judgeIndex: number,
+    criterionIndex: number,
+    field: keyof Criterion,
+    value: Criterion[keyof Criterion],
+  ) => {
+    updateJudgeAt(judgeIndex, (judge) => ({
+      ...judge,
+      criteria: (judge.criteria ?? []).map((criterion, index) =>
+        index === criterionIndex ? { ...criterion, [field]: value } : criterion,
+      ),
+    }));
   };
 
   const handleSubmit = async () => {
+    if (dropCount < 0) {
+      alert('탈락 팀 수는 0 이상이어야 합니다.');
+      return;
+    }
+
+    // Edge cases: 빈 이름, 중복 이름, 잘못된 PIN, detail 심사위원의 비정상 criteria를 저장 전에 막습니다.
+    const sanitizedJudges: JudgeConfig[] = judges.map(({ localId: _judgeLocalId, criteria, ...judge }) => {
+      const baseJudge = {
+        ...judge,
+        name: judge.name.trim(),
+        pin: judge.pin.trim(),
+      };
+
+      if (judge.type !== 'detail') {
+        return baseJudge;
+      }
+
+      return {
+        ...baseJudge,
+        // Firestore 배열 내부 객체에는 undefined 필드가 들어가면 저장이 실패합니다.
+        criteria: (criteria ?? []).map(({ localId: _criterionLocalId, ...criterion }) => ({
+          item: criterion.item.trim(),
+          maxScore: Number(criterion.maxScore) || 0,
+        })),
+      };
+    });
+
+    if (sanitizedJudges.some((judge) => judge.name.length === 0)) {
+      alert('모든 심사위원 이름을 입력해주세요.');
+      return;
+    }
+
+    const uniqueJudgeNames = new Set(sanitizedJudges.map((judge) => judge.name));
+    if (uniqueJudgeNames.size !== sanitizedJudges.length) {
+      alert('심사위원 이름은 서로 중복될 수 없습니다.');
+      return;
+    }
+
+    if (sanitizedJudges.some((judge) => !/^\d{6}$/.test(judge.pin))) {
+      alert('모든 심사위원 PIN은 숫자 6자리여야 합니다.');
+      return;
+    }
+
+    const hasInvalidCriteria = sanitizedJudges.some((judge) => {
+      if (judge.type !== 'detail') {
+        return false;
+      }
+
+      const criteria = judge.criteria ?? [];
+      return criteria.length === 0 || criteria.some((criterion) => criterion.item.length === 0 || criterion.maxScore <= 0);
+    });
+
+    if (hasInvalidCriteria) {
+      alert('세부 평가 심사위원은 비어 있지 않은 항목명과 1점 이상의 배점을 가져야 합니다.');
+      return;
+    }
+
     setIsSaving(true);
     try {
-      await onSave(judges, dropCount);
+      await onSave(sanitizedJudges, dropCount);
       onClose();
     } catch {
-      alert("오디션 설정 저장 중 오류가 발생했습니다.");
+      alert('오디션 설정 저장 중 오류가 발생했습니다.');
     } finally {
       setIsSaving(false);
     }
   };
 
-  const isDeleteReady = deleteConfirmText.trim() === audition.name.trim();
-
   const handleDelete = async () => {
     if (!isDeleteReady) {
-      alert("삭제하려면 오디션 이름을 정확히 입력해주세요.");
+      alert('삭제하려면 오디션 이름을 정확히 입력해주세요.');
       return;
     }
 
@@ -103,254 +222,332 @@ export const AuditionSettingsModal: React.FC<AuditionSettingsModalProps> = ({
     try {
       await onDelete();
     } catch {
-      alert("오디션 삭제 중 오류가 발생했습니다.");
+      alert('오디션 삭제 중 오류가 발생했습니다.');
     } finally {
       setIsDeleting(false);
     }
   };
 
   return (
-    <div className="modal-overlay" style={{ 
-      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, 
-      background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)',
-      display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000,
-      padding: '2rem'
-    }}>
-      <div className="glass-card fade-in" style={{ 
-        width: '100%', maxWidth: '800px', maxHeight: '90vh', overflowY: 'auto',
-        padding: '2.5rem', position: 'relative'
-      }}>
-        <button 
-          onClick={onClose}
-          style={{ 
-            position: 'absolute', top: '1.5rem', right: '1.5rem', 
-            background: 'rgba(255,255,255,0.05)', border: 'none', color: 'var(--text-muted)', 
-            cursor: 'pointer', borderRadius: '50%', width: '36px', height: '36px',
-            display: 'flex', alignItems: 'center', justifyContent: 'center'
-          }}
-        >
-          <X size={20} />
-        </button>
+    <ModalPortal>
+      <div className="modal-overlay-shell">
+        <div className="modal-surface modal-surface--scrollable fade-in" style={{ maxWidth: '1120px' }}>
+          <button
+            type="button"
+            className="modal-close-button"
+            onClick={onClose}
+            aria-label="오디션 환경설정 닫기"
+          >
+            <X size={20} />
+          </button>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem' }}>
-          <Settings size={28} color="var(--primary)" />
-          <h2 style={{ fontSize: '1.8rem' }}>오디션 환경설정 ({audition.name})</h2>
-        </div>
+          <div className="modal-content">
+            <div className="modal-header-row">
+              <div className="modal-header-copy">
+                <span className="modal-kicker">
+                  <Settings size={14} />
+                  오디션 환경설정
+                </span>
+                <h2>{audition.name}</h2>
+              </div>
+            </div>
 
-        {/* 하위 N팀 탈락 설정 */}
-        <section style={{ marginBottom: '2.5rem', background: 'rgba(255,255,255,0.03)', padding: '1.5rem', borderRadius: '16px' }}>
-          <h3 style={{ fontSize: '1.2rem', marginBottom: '1rem', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-            <ArrowRight size={18} /> 탈락 기준 설정
-          </h3>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <label style={{ fontSize: '1rem', color: 'var(--text)' }}>정기공연에 탈락할 하위 팀 개수:</label>
-            <input 
-              type="number"
-              min={0}
-              className="premium-input"
-              style={{ width: '80px', padding: '0.5rem' }}
-              value={dropCount}
-              onChange={(e) => setDropCount(Number(e.target.value) || 0)}
-            />
-            <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>팀 (0이면 아무도 탈락하지 않음)</span>
-          </div>
-        </section>
+            <div className="modal-summary-grid">
+              <div className="modal-summary-card">
+                <p className="modal-summary-label">등록된 심사위원</p>
+                <p className="modal-summary-value">{judges.length}명</p>
+              </div>
+              <div className="modal-summary-card">
+                <p className="modal-summary-label">활성 리더보드 심사위원</p>
+                <p className="modal-summary-value">{audition.activeJudges?.length ?? 0}명</p>
+              </div>
+              <div className="modal-summary-card">
+                <p className="modal-summary-label">현재 참가팀</p>
+                <p className="modal-summary-value">{candidateCount}팀</p>
+              </div>
+              <div className="modal-summary-card">
+                <p className="modal-summary-label">탈락 기준</p>
+                <p className="modal-summary-value">하위 {dropCount}팀</p>
+              </div>
+            </div>
 
-        {/* 심사위원 설정 */}
-        <section>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <h3 style={{ fontSize: '1.2rem', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-              <Users size={18} /> 심사위원 설정
-            </h3>
-            <button className="premium-button" onClick={handleAddJudge} style={{ padding: '0.5rem 1rem', fontSize: '0.9rem' }}>
-              <Plus size={16} /> 새로운 심사위원 추가
-            </button>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            {judges.map((judge, jIndex) => (
-              <div key={jIndex} style={{ 
-                background: 'rgba(255,255,255,0.05)', 
-                border: '1px solid rgba(255,255,255,0.1)',
-                padding: '1.5rem', 
-                borderRadius: '16px' 
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
-                  <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', flex: 1 }}>
-                    <div style={{ flex: 1, minWidth: '150px' }}>
-                      <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>심사위원 이름</label>
-                      <input 
-                        className="premium-input" 
-                        value={judge.name} 
-                        onChange={(e) => handleChangeJudge(jIndex, 'name', e.target.value)} 
-                        style={{ width: '100%', padding: '0.6rem' }}
-                      />
-                    </div>
-                    <div style={{ flex: 1, minWidth: '150px' }}>
-                      <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>6자리 PIN 코드</label>
-                      <input 
-                        className="premium-input" 
-                        value={judge.pin} 
-                        maxLength={6}
-                        onChange={(e) => handleChangeJudge(jIndex, 'pin', e.target.value.replace(/[^0-9]/g, ''))} 
-                        style={{ width: '100%', padding: '0.6rem' }}
-                      />
-                    </div>
-                    <div style={{ flex: 1, minWidth: '150px' }}>
-                      <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>평가 유형</label>
-                      <select 
-                        className="premium-input"
-                        value={judge.type}
-                        onChange={(e) => handleChangeJudge(jIndex, 'type', e.target.value as JudgeType)}
-                        style={{ width: '100%', padding: '0.6rem', cursor: 'pointer' }}
-                      >
-                        <option value="detail">항목별 세부 평가</option>
-                        <option value="simple">단순 총점 평가</option>
-                        <option value="observer">참관자 (읽기 전용)</option>
-                      </select>
+            <div className="modal-body-grid">
+              <div className="modal-main-column">
+                <section className="modal-section">
+                <div className="modal-section-header">
+                  <div>
+                    <div className="modal-section-title">
+                      <ArrowRight size={18} color="var(--primary)" />
+                      기본 운영 설정
                     </div>
                   </div>
-                  <button 
-                    onClick={() => handleRemoveJudge(jIndex)}
-                    style={{ 
-                      background: 'rgba(244, 63, 94, 0.1)', border: '1px solid rgba(244, 63, 94, 0.2)', 
-                      color: '#f43f5e', padding: '0.6rem 1rem', borderRadius: '12px', cursor: 'pointer',
-                      display: 'flex', alignItems: 'center', gap: '0.5rem', transition: 'all 0.2s', alignSelf: 'flex-end'
-                    }}
-                  >
-                    <Trash2 size={16} /> 삭제
+                </div>
+
+                <div className="modal-muted-card" style={{ padding: '1rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.6rem', color: 'var(--text-muted)' }}>
+                    정기공연에 탈락할 하위 팀 개수
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', flexWrap: 'wrap' }}>
+                    <input
+                      type="number"
+                      min={0}
+                      className="premium-input"
+                      style={{ width: '110px' }}
+                      value={dropCount}
+                      onChange={(e) => setDropCount(Math.max(0, Number(e.target.value) || 0))}
+                    />
+                    <span style={{ color: 'rgba(255,255,255,0.75)' }}>
+                      팀
+                    </span>
+                    <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                      0이면 아무도 탈락하지 않습니다.
+                    </span>
+                  </div>
+                </div>
+              </section>
+
+              <section className="modal-section">
+                <div className="modal-section-header">
+                  <div>
+                    <div className="modal-section-title">
+                      <Users size={18} color="var(--primary)" />
+                      심사위원 설정
+                    </div>
+                  </div>
+                  <button type="button" className="premium-button" onClick={handleAddJudge}>
+                    <Plus size={16} />
+                    새로운 심사위원 추가
                   </button>
                 </div>
 
-                {judge.type === 'detail' && (
-                  <div style={{ marginTop: '1.5rem', background: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: '12px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                      <p style={{ fontSize: '0.95rem', color: 'var(--text-muted)' }}>세부 평가 항목 설정 (총점 계산에 사용됨)</p>
-                      <button 
-                        onClick={() => handleAddCriterion(jIndex)}
-                        style={{ 
-                          background: 'rgba(99, 102, 241, 0.1)', border: '1px solid rgba(99, 102, 241, 0.2)', 
-                          color: 'var(--primary)', padding: '0.4rem 0.8rem', borderRadius: '8px', cursor: 'pointer',
-                          display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem'
-                        }}
-                      >
-                        <Plus size={14} /> 항목 추가
-                      </button>
-                    </div>
-                    
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                      {judge.criteria?.map((criterion, cIndex) => (
-                        <div key={cIndex} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <input 
-                            className="premium-input" 
-                            placeholder="항목명 (예: 음정)"
-                            value={criterion.item} 
-                            onChange={(e) => handleChangeCriterion(jIndex, cIndex, 'item', e.target.value)} 
-                            style={{ flex: 2, padding: '0.5rem' }}
-                          />
-                          <input 
-                            type="number"
-                            className="premium-input" 
-                            placeholder="배점"
-                            value={criterion.maxScore} 
-                            onChange={(e) => handleChangeCriterion(jIndex, cIndex, 'maxScore', Number(e.target.value) || 0)} 
-                            style={{ flex: 1, padding: '0.5rem' }}
-                          />
-                          <button 
-                            onClick={() => handleRemoveCriterion(jIndex, cIndex)}
-                            style={{ 
-                              background: 'transparent', border: 'none', color: '#f43f5e', 
-                              cursor: 'pointer', padding: '0.5rem'
+                <div className="judge-config-list">
+                  {judges.map((judge, judgeIndex) => {
+                    const totalCriteriaScore = (judge.criteria ?? []).reduce((sum, criterion) => sum + criterion.maxScore, 0);
+
+                    return (
+                      <div key={judge.localId} className="judge-config-card">
+                        <div className="judge-config-header">
+                          <div>
+                            <div className="judge-config-title">
+                              <h3 style={{ fontSize: '1.1rem' }}>{judge.name || `심사위원 ${judgeIndex + 1}`}</h3>
+                              <span className="status-badge status-badge--muted">
+                                {JUDGE_TYPE_LABELS[judge.type]}
+                              </span>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveJudge(judgeIndex)}
+                            style={{
+                              background: 'rgba(244, 63, 94, 0.1)',
+                              border: '1px solid rgba(244, 63, 94, 0.2)',
+                              color: '#f43f5e',
+                              padding: '0.65rem 1rem',
+                              borderRadius: '12px',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.5rem'
                             }}
                           >
                             <Trash2 size={16} />
+                            삭제
                           </button>
                         </div>
-                      ))}
+
+                        <div className="judge-config-grid">
+                          <div>
+                            <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.45rem' }}>
+                              심사위원 이름
+                            </label>
+                            <input
+                              className="premium-input"
+                              value={judge.name}
+                              onChange={(e) => handleChangeJudge(judgeIndex, 'name', e.target.value)}
+                            />
+                          </div>
+
+                          <div>
+                            <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.45rem' }}>
+                              6자리 PIN 코드
+                            </label>
+                            <input
+                              className="premium-input"
+                              value={judge.pin}
+                              maxLength={6}
+                              onChange={(e) => handleChangeJudge(judgeIndex, 'pin', e.target.value.replace(/[^0-9]/g, ''))}
+                            />
+                          </div>
+
+                          <div>
+                            <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.45rem' }}>
+                              평가 유형
+                            </label>
+                            <select
+                              className="premium-input"
+                              style={{ cursor: 'pointer' }}
+                              value={judge.type}
+                              onChange={(e) => handleChangeJudge(judgeIndex, 'type', e.target.value as JudgeType)}
+                            >
+                              <option value="detail">항목별 세부 평가</option>
+                              <option value="simple">단순 총점 평가</option>
+                              <option value="observer">참관자 (읽기 전용)</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        {judge.type === 'detail' && (
+                          <div className="judge-criteria-panel">
+                            <div className="modal-section-header" style={{ marginBottom: '0.85rem' }}>
+                              <div>
+                                <div className="modal-section-title" style={{ fontSize: '1rem' }}>
+                                  <BadgeCheck size={16} color="var(--primary)" />
+                                  세부 평가 항목
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                className="premium-button secondary-btn"
+                                style={{ padding: '0.55rem 0.9rem', fontSize: '0.9rem' }}
+                                onClick={() => handleAddCriterion(judgeIndex)}
+                              >
+                                <Plus size={15} />
+                                항목 추가
+                              </button>
+                            </div>
+
+                            <div className="criteria-list">
+                              {(judge.criteria ?? []).map((criterion, criterionIndex) => (
+                                <div key={criterion.localId} className="criteria-row">
+                                  <input
+                                    className="premium-input"
+                                    placeholder="항목명 (예: 음정)"
+                                    value={criterion.item}
+                                    onChange={(e) => handleChangeCriterion(judgeIndex, criterionIndex, 'item', e.target.value)}
+                                  />
+                                  <input
+                                    type="number"
+                                    className="premium-input"
+                                    placeholder="배점"
+                                    value={criterion.maxScore}
+                                    onChange={(e) => handleChangeCriterion(judgeIndex, criterionIndex, 'maxScore', Number(e.target.value) || 0)}
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveCriterion(judgeIndex, criterionIndex)}
+                                    style={{
+                                      background: 'transparent',
+                                      border: '1px solid rgba(244, 63, 94, 0.16)',
+                                      color: '#f43f5e',
+                                      borderRadius: '12px',
+                                      padding: '0.75rem',
+                                      cursor: 'pointer',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center'
+                                    }}
+                                  >
+                                    <Trash2 size={16} />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+
+                            <p style={{ marginTop: '0.9rem', textAlign: 'right', color: '#c7d2fe', fontSize: '0.88rem', fontWeight: 700 }}>
+                              합산 만점: {totalCriteriaScore}점
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {judges.length === 0 && (
+                    <div className="modal-muted-card" style={{ padding: '1.2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                      등록된 심사위원이 없습니다.
                     </div>
-                    {judge.criteria && judge.criteria.length > 0 && (
-                      <p style={{ marginTop: '1rem', fontSize: '0.85rem', color: 'var(--primary)', textAlign: 'right' }}>
-                        합산 만점: {judge.criteria.reduce((sum, c) => sum + c.maxScore, 0)}점
-                      </p>
-                    )}
-                  </div>
-                )}
+                  )}
+                </div>
+                </section>
               </div>
-            ))}
-            
-            {judges.length === 0 && (
-              <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
-                등록된 심사위원이 없습니다.
-              </div>
-            )}
-          </div>
-        </section>
 
-        <div style={{ marginTop: '3rem', display: 'flex', gap: '1rem' }}>
-          <button className="premium-button secondary-btn" style={{ flex: 1 }} onClick={onClose} disabled={isSaving || isDeleting}>취소</button>
-          <button className="premium-button" style={{ flex: 2 }} onClick={handleSubmit} disabled={isSaving || isDeleting}>
-            {isSaving ? '저장 중...' : '설정 저장하기'}
-          </button>
+              <aside className="modal-side-column">
+                <section className="modal-danger-card">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.75rem' }}>
+                  <AlertTriangle size={18} color="#fda4af" />
+                  <h3 style={{ fontSize: '1.1rem', color: '#fecdd3' }}>위험 작업</h3>
+                </div>
+
+                <p style={{ color: 'rgba(255,255,255,0.84)', fontSize: '0.95rem', marginBottom: '0.6rem' }}>
+                  실수로 생성한 오디션을 정리할 때만 사용하세요.
+                </p>
+                <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.9rem', marginBottom: '0.75rem' }}>
+                  {candidateCount > 0
+                    ? `참가자 ${candidateCount}팀의 점수, 완료 상태, 코멘트도 함께 삭제됩니다.`
+                    : '현재 연결된 참가자는 없지만, 오디션 정보와 심사위원 설정은 완전히 삭제됩니다.'}
+                </p>
+                <p style={{ color: '#fecaca', fontSize: '0.86rem', marginBottom: '0.8rem' }}>
+                  삭제를 진행하려면 아래 입력란에 오디션 이름을 정확히 입력하세요.
+                </p>
+
+                <div className="modal-muted-card" style={{ padding: '0.9rem 1rem', marginBottom: '0.8rem' }}>
+                  <p className="modal-summary-label">확인용 이름</p>
+                  <p style={{ fontWeight: 700 }}>{audition.name}</p>
+                </div>
+
+                <input
+                  className="premium-input"
+                  placeholder={audition.name}
+                  value={deleteConfirmText}
+                  onChange={(e) => setDeleteConfirmText(e.target.value)}
+                  disabled={isSaving || isDeleting}
+                  style={{
+                    borderColor: 'rgba(244, 63, 94, 0.24)',
+                    marginBottom: '0.1rem'
+                  }}
+                />
+
+                <div className={`danger-status ${isDeleteReady ? 'danger-status--ready' : 'danger-status--pending'}`}>
+                  {isDeleteReady ? '입력 확인 완료' : '오디션 이름이 아직 일치하지 않습니다'}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={!isDeleteReady || isSaving || isDeleting}
+                  style={{
+                    marginTop: '1rem',
+                    width: '100%',
+                    background: isDeleteReady ? 'linear-gradient(135deg, #ef4444, #f97316)' : 'rgba(255,255,255,0.08)',
+                    color: isDeleteReady ? 'white' : 'rgba(255,255,255,0.45)',
+                    border: 'none',
+                    borderRadius: '14px',
+                    padding: '0.95rem 1.2rem',
+                    fontWeight: 700,
+                    cursor: isDeleteReady && !isSaving && !isDeleting ? 'pointer' : 'not-allowed'
+                  }}
+                >
+                  {isDeleting ? '삭제 중...' : '오디션 삭제'}
+                </button>
+
+                <p style={{ color: 'rgba(255,255,255,0.56)', fontSize: '0.82rem', marginTop: '0.85rem' }}>
+                  다른 오디션이 없으면 삭제 직후 기본 오디션이 자동으로 다시 생성됩니다.
+                </p>
+                </section>
+              </aside>
+            </div>
+
+            <div className="modal-action-bar">
+              <button type="button" className="premium-button secondary-btn" style={{ flex: 1 }} onClick={onClose} disabled={isSaving || isDeleting}>
+                취소
+              </button>
+              <button type="button" className="premium-button" style={{ flex: 2 }} onClick={handleSubmit} disabled={isSaving || isDeleting}>
+                {isSaving ? '저장 중...' : '설정 저장하기'}
+              </button>
+            </div>
+          </div>
         </div>
-
-        <section style={{
-          marginTop: '1.5rem',
-          background: 'rgba(127, 29, 29, 0.18)',
-          border: '1px solid rgba(244, 63, 94, 0.22)',
-          borderRadius: '16px',
-          padding: '1.5rem'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.8rem' }}>
-            <Trash2 size={18} color="#f87171" />
-            <h3 style={{ fontSize: '1.1rem', color: '#fecaca' }}>오디션 삭제</h3>
-          </div>
-          <p style={{ color: 'rgba(255,255,255,0.82)', fontSize: '0.95rem', marginBottom: '0.6rem' }}>
-            실수로 생성한 오디션을 정리할 때만 사용하세요.
-          </p>
-          <p style={{ color: 'rgba(255,255,255,0.72)', fontSize: '0.9rem', marginBottom: '0.6rem' }}>
-            {candidateCount > 0
-              ? `참가자 ${candidateCount}팀의 점수, 완료 상태, 코멘트까지 함께 삭제됩니다.`
-              : '현재 연결된 참가자는 없지만, 오디션 정보와 심사위원 설정은 완전히 삭제됩니다.'}
-          </p>
-          <p style={{ color: '#fecaca', fontSize: '0.85rem', marginBottom: '1rem' }}>
-            삭제하려면 오디션 이름을 정확히 입력하세요: {audition.name}
-          </p>
-          <div style={{ display: 'flex', gap: '0.8rem', flexWrap: 'wrap' }}>
-            <input
-              className="premium-input"
-              placeholder={audition.name}
-              value={deleteConfirmText}
-              onChange={(e) => setDeleteConfirmText(e.target.value)}
-              disabled={isSaving || isDeleting}
-              style={{
-                flex: 1,
-                minWidth: '240px',
-                borderColor: 'rgba(244, 63, 94, 0.24)',
-                background: 'rgba(15, 23, 42, 0.7)'
-              }}
-            />
-            <button
-              onClick={handleDelete}
-              disabled={!isDeleteReady || isSaving || isDeleting}
-              style={{
-                background: isDeleteReady ? 'linear-gradient(135deg, #ef4444, #f97316)' : 'rgba(255,255,255,0.08)',
-                color: isDeleteReady ? 'white' : 'rgba(255,255,255,0.45)',
-                border: 'none',
-                borderRadius: '12px',
-                padding: '0.8rem 1.2rem',
-                fontWeight: 700,
-                cursor: isDeleteReady && !isSaving && !isDeleting ? 'pointer' : 'not-allowed',
-                minWidth: '140px'
-              }}
-            >
-              {isDeleting ? '삭제 중...' : '오디션 삭제'}
-            </button>
-          </div>
-          <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: '0.8rem', marginTop: '0.8rem' }}>
-            다른 오디션이 없으면 삭제 직후 기본 오디션이 자동으로 다시 생성됩니다.
-          </p>
-        </section>
       </div>
-    </div>
+    </ModalPortal>
   );
 };

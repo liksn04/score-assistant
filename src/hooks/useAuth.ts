@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { Audition } from '../types';
+import { ADMIN_PIN } from '../constants/admin';
 
 const AUTH_STORAGE_KEY = 'audition_judge_session';
 
@@ -35,10 +36,9 @@ export const useAuth = () => {
     }
   };
 
-  const loginAdmin = async (pin: string, audition?: Audition) => {
+  const loginAdmin = async (pin: string, _audition?: Audition) => {
     await new Promise(resolve => setTimeout(resolve, 500));
-    // 공통 관리자 PIN '000000' 또는 현재 오디션의 adminPin
-    if (pin === '000000' || (audition && audition.adminPin === pin)) {
+    if (pin === ADMIN_PIN) {
       setIsAdmin(true);
       localStorage.setItem(AUTH_STORAGE_KEY, 'ADMIN');
       return true;

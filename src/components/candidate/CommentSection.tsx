@@ -46,6 +46,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
             {candidate.comments && candidate.comments.length > 0 ? (
               candidate.comments.map((comment: any) => (
                 <div 
+                  className="comment-entry"
                   key={comment.id} 
                   style={{ 
                     background: 'rgba(255, 255, 255, 0.03)', 
@@ -59,7 +60,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
                   }}
                 >
                   <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.2rem' }}>
+                    <div className="comment-entry-header" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.2rem' }}>
                       <span style={{ 
                         fontSize: '0.75rem', 
                         fontWeight: 'bold', 
@@ -101,7 +102,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
               </p>
             )}
           </div>
-          <div style={{ display: 'flex', gap: '0.6rem' }}>
+          <div className="comment-input-row" style={{ display: 'flex', gap: '0.6rem' }}>
             <input 
               className="premium-input" 
               style={{ flex: 1, padding: '0.6rem 1rem', fontSize: '0.9rem' }} 
@@ -111,7 +112,7 @@ const CommentSection: React.FC<CommentSectionProps> = ({
               onKeyDown={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && onAddComment(candidate.id)} 
             />
             <button 
-              className="premium-button" 
+              className="premium-button comment-send-btn" 
               style={{ padding: '0.6rem', borderRadius: '10px' }} 
               onClick={() => onAddComment(candidate.id)} 
               disabled={!commentInput?.trim()}

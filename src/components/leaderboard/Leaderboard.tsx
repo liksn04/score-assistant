@@ -16,13 +16,13 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ sortedCandidates, activeAudit
   const isCutoffLine = (index: number) => dropCount > 0 && index === cutoffIndex;
 
   return (
-    <section className="glass-card" style={{ padding: '2rem', height: 'fit-content' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '2rem' }}>
+    <section className="glass-card leaderboard-section" style={{ padding: '2rem', height: 'fit-content' }}>
+      <div className="leaderboard-section-header" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '2rem' }}>
         <Trophy size={22} color="#fbbf24" />
         <h3 style={{ fontSize: '1.4rem' }}>실시간 순위 현황</h3>
       </div>
-      
-      <div className="leaderboard-wrapper">
+
+      <div className="leaderboard-wrapper leaderboard-desktop">
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '400px' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
@@ -132,6 +132,95 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ sortedCandidates, activeAudit
             )}
           </tbody>
         </table>
+      </div>
+
+      <div className="leaderboard-mobile">
+        {sortedCandidates.length === 0 ? (
+          <div className="leaderboard-mobile-card" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+            참가팀이 없습니다.
+          </div>
+        ) : (
+          sortedCandidates.map((candidate: Candidate, index: number) => {
+            const isEliminationRisk = dropCount > 0 && index >= cutoffIndex;
+            const isTopRank = index === 0;
+
+            return (
+              <React.Fragment key={`${candidate.id}-mobile`}>
+                {isCutoffLine(index) && (
+                  <div className="leaderboard-cutoff">
+                    <AlertTriangle size={14} />
+                    하위 {dropCount}팀 탈락 커트라인
+                  </div>
+                )}
+
+                <article
+                  className="leaderboard-mobile-card"
+                  style={{
+                    background: isEliminationRisk ? 'rgba(244, 63, 94, 0.05)' : 'rgba(255,255,255,0.03)',
+                    borderColor: isEliminationRisk ? 'rgba(244, 63, 94, 0.18)' : 'rgba(255,255,255,0.08)'
+                  }}
+                >
+                  <div className="leaderboard-mobile-row">
+                    <div
+                      className="leaderboard-rank-badge"
+                      style={{
+                        background: isTopRank ? 'rgba(251, 191, 36, 0.2)' : (isEliminationRisk ? 'rgba(244, 63, 94, 0.2)' : 'rgba(255,255,255,0.05)'),
+                        color: isTopRank ? '#fbbf24' : (isEliminationRisk ? '#f43f5e' : 'var(--text)'),
+                        border: isTopRank ? '1px solid #fbbf24' : (isEliminationRisk ? '1px solid rgba(244, 63, 94, 0.4)' : 'none')
+                      }}
+                    >
+                      {index + 1}
+                    </div>
+
+                    <div className="leaderboard-mobile-meta">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: 700, color: isEliminationRisk ? '#fda4af' : 'var(--text)' }}>{candidate.name}</span>
+                        {isEliminationRisk && (
+                          <span style={{
+                            fontSize: '0.68rem',
+                            backgroundColor: '#f43f5e',
+                            color: 'white',
+                            padding: '2px 6px',
+                            borderRadius: '999px',
+                            fontWeight: 700
+                          }}>
+                            탈락 위기
+                          </span>
+                        )}
+                      </div>
+                      {candidate.song && (
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{candidate.song}</span>
+                      )}
+                    </div>
+
+                    <span
+                      className="leaderboard-average-pill"
+                      style={{
+                        background: isEliminationRisk
+                          ? 'linear-gradient(135deg, #f43f5e, #991b1b)'
+                          : 'linear-gradient(135deg, var(--primary), var(--secondary))',
+                      }}
+                    >
+                      {candidate.average}
+                    </span>
+                  </div>
+
+                  <div className="leaderboard-mobile-summary">
+                    <span>전체 합산</span>
+                    <strong style={{ color: isEliminationRisk ? '#fda4af' : 'var(--text)' }}>{candidate.total}점</strong>
+                  </div>
+                </article>
+              </React.Fragment>
+            );
+          })
+        )}
+
+        {dropCount > 0 && totalTeams > 0 && totalTeams <= cutoffIndex && (
+          <div className="leaderboard-cutoff" style={{ color: 'var(--text-muted)' }}>
+            <AlertTriangle size={14} />
+            현재 등록 팀이 적어 모든 팀이 합격권입니다
+          </div>
+        )}
       </div>
     </section>
   );

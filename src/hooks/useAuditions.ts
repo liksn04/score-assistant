@@ -3,6 +3,7 @@ import { collection, query, onSnapshot, orderBy, getDocs, where, writeBatch, doc
 import { db } from '../firebaseConfig';
 import { firebaseService } from '../api/firebaseService';
 import type { Audition } from '../types';
+import { ADMIN_PIN } from '../constants/admin';
 
 export const useAuditions = () => {
   const [auditions, setAuditions] = useState<Audition[]>([]);
@@ -47,7 +48,7 @@ export const useAuditions = () => {
           activeJudges: d.activeJudges || [],
           judges: d.judges || [],
           dropCount: d.dropCount || 0,
-          adminPin: d.adminPin || '000000',
+          adminPin: ADMIN_PIN,
           createdAt: d.createdAt,
           updatedAt: d.updatedAt
         };
@@ -56,7 +57,7 @@ export const useAuditions = () => {
       setAuditions(data);
       
       if (data.length === 0 && !isLoading) {
-        const newAudition = await firebaseService.createAudition("기본 오디션", "000000");
+        const newAudition = await firebaseService.createAudition("기본 오디션");
         setActiveAuditionId(newAudition.id);
         await migrateLegacyCandidates(newAudition.id);
       } else if (data.length > 0) {

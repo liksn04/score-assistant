@@ -58,11 +58,11 @@ const CandidateScoreCard: React.FC<CandidateScoreCardProps> = ({
   return (
     <div className="glass-card candidate-row">
       <div className="candidate-row-header">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+        <div className="candidate-title-block" style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
           <span style={{ fontSize: '1.2rem', fontWeight: 600 }}>{candidate.name}</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
             {editingSongId === candidate.id && !isObserver ? (
-              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+              <div className="candidate-song-editor" style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
                 <input 
                   className="premium-input" 
                   style={{ padding: '2px 8px', fontSize: '0.8rem', width: '120px' }}
@@ -90,6 +90,7 @@ const CandidateScoreCard: React.FC<CandidateScoreCardProps> = ({
               </div>
             ) : (
               <span 
+                className="candidate-song-text"
                 style={{ 
                   fontSize: '0.85rem', 
                   color: 'var(--text-muted)', 
@@ -108,7 +109,7 @@ const CandidateScoreCard: React.FC<CandidateScoreCardProps> = ({
           </div>
         </div>
         <div className="score-info-group">
-          <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+          <span className="candidate-score-summary" style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
             {isObserver ? '평균: ' : '총점: '}
             <strong style={{ color: 'var(--primary)', fontSize: '1.1rem' }}>
               {isObserver ? candidate.average : getJudgeTotal(candidate, selectedJudge)}
@@ -121,7 +122,7 @@ const CandidateScoreCard: React.FC<CandidateScoreCardProps> = ({
             {(!isObserver && (!judgeConfig || judgeConfig.type === 'simple')) && <span style={{ fontSize: '0.75rem', marginLeft: '2px' }}>/ 100</span>}
           </span>
           {!isObserver && !isReadOnly && (
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <div className="candidate-actions" style={{ display: 'flex', gap: '0.5rem' }}>
               <button 
                 onClick={() => onToggleCompletion(candidate.id, isCompleted)} 
                 className={`premium-button ${isCompleted ? 'completed-btn' : 'complete-btn'}`}
@@ -141,7 +142,7 @@ const CandidateScoreCard: React.FC<CandidateScoreCardProps> = ({
                 {isCompleted ? <RotateCcw size={12} /> : <CheckCircle2 size={12} />}
                 {isCompleted ? '취소' : '완료'}
               </button>
-              <button onClick={() => deleteCandidate(candidate.id, candidate.name)} style={{ background: 'none', border: 'none', color: 'rgba(244, 63, 94, 0.6)', cursor: 'pointer', padding: '0 4px' }}>
+              <button className="candidate-delete-btn" onClick={() => deleteCandidate(candidate.id, candidate.name)} style={{ background: 'none', border: 'none', color: 'rgba(244, 63, 94, 0.6)', cursor: 'pointer', padding: '0 4px' }}>
                 <Trash2 size={18} />
               </button>
             </div>
@@ -157,9 +158,9 @@ const CandidateScoreCard: React.FC<CandidateScoreCardProps> = ({
       {/* Scoring Section */}
       {!isObserver && judgeConfig && (
         judgeConfig.type === 'simple' ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginTop: '1rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-              <label style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>총점 입력 (0~100):</label>
+          <div className="simple-score-row" style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginTop: '1rem' }}>
+            <div className="simple-score-entry" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <label className="simple-score-label" style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>총점 입력 (0~100):</label>
               <input 
                 type="number"
                 className="premium-input score-input"
@@ -173,7 +174,7 @@ const CandidateScoreCard: React.FC<CandidateScoreCardProps> = ({
               />
             </div>
             {!isReadOnly && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div className="simple-strike-row" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <button 
                   onClick={() => updateItemStrikes(candidate.id, 'simple', 1)}
                   style={{ background: 'rgba(244, 63, 94, 0.1)', border: '1px solid rgba(244, 63, 94, 0.2)', color: '#f43f5e', borderRadius: '8px', padding: '4px 8px', display: 'flex', alignItems: 'center', cursor: 'pointer' }}
@@ -206,12 +207,12 @@ const CandidateScoreCard: React.FC<CandidateScoreCardProps> = ({
         ) : judgeConfig.type === 'detail' && judgeConfig.criteria ? (
           <div className="scoring-grid" style={{ marginTop: '1rem' }}>
             {judgeConfig.criteria.map((criterion) => (
-              <div key={criterion.item} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255, 255, 255, 0.02)', padding: '0.8rem', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.03)' }}>
+              <div className="criterion-card" key={criterion.item} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255, 255, 255, 0.02)', padding: '0.8rem', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.03)' }}>
                 <label style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', flex: 1 }}>{criterion.item} ({criterion.maxScore})</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <div className="criterion-controls" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                   <input 
                     type="number" 
-                    className="premium-input score-input" 
+                    className="premium-input score-input criterion-input" 
                     style={{ width: '60px', padding: '6px', textAlign: 'center', fontSize: '0.9rem' }} 
                     min="0" 
                     max={criterion.maxScore} 

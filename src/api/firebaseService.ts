@@ -14,6 +14,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import type { Candidate, Audition, JudgeConfig } from '../types';
+import { ADMIN_PIN } from '../constants/admin';
 
 const FIRESTORE_DELETE_BATCH_SIZE = 450;
 
@@ -75,14 +76,14 @@ const calculateTotalAndAverage = (scores: Record<string, any>, audition: Auditio
 
 export const firebaseService = {
   // 오디션 관리
-  async createAudition(name: string, adminPin: string) {
+  async createAudition(name: string) {
     return await addDoc(collection(db, 'auditions'), {
       name,
       status: 'active',
       activeJudges: [],
       judges: [],
       dropCount: 0,
-      adminPin,
+      adminPin: ADMIN_PIN,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     });
@@ -110,8 +111,28 @@ export const firebaseService = {
   },
 
   async updateAuditionSettings(id: string, judges: JudgeConfig[], dropCount: number) {
+    const sanitizedJudges = judges.map((judge) => {
+      const baseJudge = {
+        name: judge.name.trim(),
+        pin: judge.pin.trim(),
+        type: judge.type,
+      };
+
+      if (judge.type !== 'detail') {
+        return baseJudge;
+      }
+
+      return {
+        ...baseJudge,
+        criteria: (judge.criteria ?? []).map((criterion) => ({
+          item: criterion.item.trim(),
+          maxScore: Number(criterion.maxScore) || 0,
+        })),
+      };
+    });
+
     return await updateDoc(doc(db, 'auditions', id), {
-      judges,
+      judges: sanitizedJudges,
       dropCount,
       updatedAt: serverTimestamp()
     });

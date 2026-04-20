@@ -1,22 +1,24 @@
 import { useState, useEffect, useMemo } from 'react';
 import { collection, query, onSnapshot, where } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
-import type { Candidate, JudgeName } from '../types';
+import type { Candidate, Audition } from '../types';
 import { getJudgeScore } from '../utils/statsUtils';
 
-export const useCandidates = (auditionId: string | null, activeJudges: JudgeName[] = []) => {
+export const useCandidates = (audition: Audition | null) => {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // 실시간 순위 데이터 (메모이제이션)
-  // 실시간 순위 데이터 (메모이제이션 - 활성 심사위원이 바뀔 때마다 재계산)
   const sortedCandidates = useMemo(() => {
+    if (!audition) return [];
+    const activeJudges = audition.activeJudges || [];
+    
     return [...candidates].map(c => {
       let total = 0;
       let count = 0;
       
       activeJudges.forEach(j => {
-        const score = getJudgeScore(c, j);
+        const score = getJudgeScore(c, j, audition);
         if (score !== null) {
           total += score;
           count++;
@@ -34,11 +36,10 @@ export const useCandidates = (auditionId: string | null, activeJudges: JudgeName
       if (b.average !== a.average) return b.average - a.average;
       return a.name.localeCompare(b.name);
     });
-  }, [candidates, activeJudges]);
+  }, [candidates, audition]);
 
-  // 실시간 데이터 수신 및 정렬 고정
   useEffect(() => {
-    if (!auditionId) {
+    if (!audition?.id) {
       setCandidates([]);
       setIsLoading(false);
       return;
@@ -46,7 +47,7 @@ export const useCandidates = (auditionId: string | null, activeJudges: JudgeName
 
     const q = query(
       collection(db, 'candidates'),
-      where('auditionId', '==', auditionId)
+      where('auditionId', '==', audition.id)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -55,7 +56,6 @@ export const useCandidates = (auditionId: string | null, activeJudges: JudgeName
         ...doc.data()
       })) as Candidate[];
       
-      // 입력창 고정을 위해 등록 순으로 정렬 (createdAt 기준 오름차순, 없으면 id 기준)
       const fixedData = [...data].sort((a, b) => {
         const timeA = a.createdAt?.seconds || 0;
         const timeB = b.createdAt?.seconds || 0;
@@ -71,7 +71,7 @@ export const useCandidates = (auditionId: string | null, activeJudges: JudgeName
     });
 
     return () => unsubscribe();
-  }, [auditionId]);
+  }, [audition?.id]);
 
   return { candidates, sortedCandidates, isLoading };
 };

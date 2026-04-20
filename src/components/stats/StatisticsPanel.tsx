@@ -24,12 +24,12 @@ interface StatisticsPanelProps {
 }
 
 const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ candidates, activeAudition }) => {
-  const stats = calculateStats(candidates);
+  const stats = activeAudition ? calculateStats(candidates, activeAudition) : null;
 
   if (!stats || !activeAudition) return null;
 
   const handleExport = () => {
-    exportToExcel(candidates, activeAudition.name);
+    exportToExcel(candidates, activeAudition);
   };
 
   const handleToggleArchive = async () => {

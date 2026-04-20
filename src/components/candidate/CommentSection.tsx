@@ -1,10 +1,10 @@
 import React from 'react';
 import { MessageSquare, ChevronDown, ChevronUp, X, Send } from 'lucide-react';
-import type { Candidate, JudgeName } from '../../types';
+import type { Candidate } from '../../types';
 
 interface CommentSectionProps {
   candidate: Candidate;
-  selectedJudge: JudgeName;
+  selectedJudge: string;
   commentInput: string;
   isExpanded: boolean;
   onToggleExpand: (id: string) => void;

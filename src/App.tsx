@@ -1,29 +1,34 @@
-import React from 'react';
-import type { Candidate, JudgeName, EvaluationItem } from './types';
-import { SIMPLE_JUDGES, EVALUATION_ITEMS, JUDGES } from './types';
+import React, { useState, useEffect } from 'react';
+import type { Candidate, JudgeConfig } from './types';
 import { useCandidates } from './hooks/useCandidates';
 import { useJudgeActions } from './hooks/useJudgeActions';
 import { useAuditions } from './hooks/useAuditions';
 import { useAuth } from './hooks/useAuth';
 import { firebaseService } from './api/firebaseService';
 import PinModal from './components/auth/PinModal';
+import { AuditionSettingsModal } from './components/admin/AuditionSettingsModal';
 import CandidateScoreCard from './components/candidate/CandidateScoreCard';
 import Leaderboard from './components/leaderboard/Leaderboard';
 import StatisticsPanel from './components/stats/StatisticsPanel';
-import { LogOut, Star, UserPlus, Users, LayoutGrid, Plus, Edit2, CheckCircle, ChevronDown, ChevronUp, Database } from 'lucide-react';
+import { LogOut, Star, UserPlus, Users, LayoutGrid, Plus, Edit2, CheckCircle, ChevronDown, ChevronUp, Database, Settings } from 'lucide-react';
+import { getJudgeScore } from './utils/statsUtils';
 
 const App: React.FC = () => {
-  const [isCompletedExpanded, setIsCompletedExpanded] = React.useState(false);
-  const [isAddingAudition, setIsAddingAudition] = React.useState(false);
-  const [newAuditionName, setNewAuditionName] = React.useState('');
-  const [selectedJudgeToAuth, setSelectedJudgeToAuth] = React.useState<JudgeName | null>(null);
+  const [isCompletedExpanded, setIsCompletedExpanded] = useState(false);
+  const [isAddingAudition, setIsAddingAudition] = useState(false);
+  const [newAuditionName, setNewAuditionName] = useState('');
+  const [newAdminPin, setNewAdminPin] = useState('000000');
+  
+  const [selectedJudgeToAuth, setSelectedJudgeToAuth] = useState<JudgeConfig | null>(null);
+  const [isAdminPinModalOpen, setIsAdminPinModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
-  const { judgeRole, isLoadingAuth, loginWithPin, logout } = useAuth();
+  const { judgeRole, isAdmin, isLoadingAuth, loginWithPin, loginAdmin, logout } = useAuth();
   const { auditions, activeAuditionId, setActiveAuditionId, isLoading: isAuditionLoading } = useAuditions();
   const activeAudition = auditions.find(a => a.id === activeAuditionId);
   const activeJudges = activeAudition?.activeJudges || [];
   
-  const { candidates, sortedCandidates, isLoading: isCandidatesLoading } = useCandidates(activeAuditionId, activeJudges);
+  const { candidates, sortedCandidates, isLoading: isCandidatesLoading } = useCandidates(activeAudition || null);
   
   const {
     selectedJudge: currentJudge, setSelectedJudge, isObserver,
@@ -37,12 +42,11 @@ const App: React.FC = () => {
     addComment, deleteComment,
     updateItemStrikes, updateSongTitle, deleteCandidate,
     toggleCompletion
-  } = useJudgeActions(candidates, activeAuditionId);
+  } = useJudgeActions(candidates, activeAudition || null);
 
   const isArchived = activeAudition?.status === 'archived';
 
-  // 인증된 역할이 있으면 자동으로 심사위원 설정
-  React.useEffect(() => {
+  useEffect(() => {
     if (judgeRole) {
       setSelectedJudge(judgeRole);
       setSelectedJudgeToAuth(null);
@@ -51,14 +55,14 @@ const App: React.FC = () => {
     }
   }, [judgeRole, setSelectedJudge]);
 
-
   const handleCreateAudition = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newAuditionName.trim()) return;
     try {
-      const newAud = await firebaseService.createAudition(newAuditionName);
+      const newAud = await firebaseService.createAudition(newAuditionName, newAdminPin);
       setActiveAuditionId(newAud.id);
       setNewAuditionName('');
+      setNewAdminPin('000000');
       setIsAddingAudition(false);
     } catch (error) {
       alert("오디션 생성 중 오류가 발생했습니다.");
@@ -77,25 +81,42 @@ const App: React.FC = () => {
     }
   };
 
+  const handleSettingsClick = () => {
+    if (!activeAudition) return;
+    if (isAdmin) {
+      setIsSettingsModalOpen(true);
+    } else {
+      setIsAdminPinModalOpen(true);
+    }
+  };
 
-  // 심사위원별 총점 계산 도우미
-  const getJudgeTotal = (candidate: Candidate, judge: JudgeName) => {
-    const scores = candidate.scores[judge];
-    if (!scores) return 0;
-    if (SIMPLE_JUDGES.includes(judge)) return scores.simpleTotal || 0;
-    return EVALUATION_ITEMS.reduce((sum: number, item: EvaluationItem) => sum + (Number(scores[item]) || 0), 0);
+  const handleAdminAuth = async (pin: string) => {
+    const success = await loginAdmin(pin, activeAudition);
+    if (success) {
+      setIsAdminPinModalOpen(false);
+      setIsSettingsModalOpen(true);
+    }
+    return success;
+  };
+
+  const handleSaveSettings = async (judges: JudgeConfig[], dropCount: number) => {
+    if (activeAuditionId) {
+      await firebaseService.updateAuditionSettings(activeAuditionId, judges, dropCount);
+    }
+  };
+
+  // 헬퍼: 현재 오디션 기반 단순 총점 가져오기
+  const getJudgeTotal = (candidate: Candidate, judgeName: string) => {
+    if (!activeAudition) return 0;
+    return getJudgeScore(candidate, judgeName, activeAudition) || 0;
   };
 
   if (isLoadingAuth || isAuditionLoading || isCandidatesLoading) {
     return (
       <div style={{ 
         height: '100vh', 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'center',
-        background: 'var(--bg-dark)',
-        color: 'white',
-        fontSize: '1.2rem'
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'var(--bg-dark)', color: 'white', fontSize: '1.2rem'
       }}>
         <div className="fade-in">시스탬 준비 중...</div>
       </div>
@@ -121,12 +142,21 @@ const App: React.FC = () => {
                 <Database size={24} color="var(--primary)" />
                 <h2 style={{ fontSize: '1.5rem', fontWeight: 600 }}>오디션 관리</h2>
               </div>
-              <button 
-                className="premium-button" 
-                onClick={() => setIsAddingAudition(true)}
-              >
-                <Plus size={18} /> 새 오디션 시작
-              </button>
+              <div style={{ display: 'flex', gap: '1rem' }}>
+                <button 
+                  className="premium-button secondary-btn" 
+                  onClick={handleSettingsClick}
+                  disabled={!activeAudition}
+                >
+                  <Settings size={18} /> 오디션 상세 설정
+                </button>
+                <button 
+                  className="premium-button" 
+                  onClick={() => setIsAddingAudition(true)}
+                >
+                  <Plus size={18} /> 새 오디션 시작
+                </button>
+              </div>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.8rem' }}>
@@ -161,8 +191,8 @@ const App: React.FC = () => {
                   <Users size={24} color="#38bdf8" />
                 </div>
                 <div>
-                  <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>총 참가자</p>
-                  <h3 style={{ fontSize: '1.5rem' }}>{candidates.length}명</h3>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>총 참가팀</p>
+                  <h3 style={{ fontSize: '1.5rem' }}>{candidates.length}팀</h3>
                 </div>
               </div>
 
@@ -186,12 +216,13 @@ const App: React.FC = () => {
               <LayoutGrid size={24} color="var(--primary)" />
               <h2 style={{ fontSize: '1.6rem' }}>심사위원 선택</h2>
             </div>
+            {isAdmin && <span style={{ color: '#22c55e', fontSize: '0.85rem' }}>관리자 권한 활성화됨</span>}
           </div>
 
           <div className="judge-selection" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.5rem' }}>
-            {JUDGES.map((judge: JudgeName) => (
+            {activeAudition?.judges?.map((judge: JudgeConfig) => (
               <div 
-                key={judge} 
+                key={judge.name} 
                 className="glass-card judge-card hover-lift" 
                 style={{ cursor: 'pointer', textAlign: 'center' }} 
                 onClick={() => setSelectedJudgeToAuth(judge)}
@@ -199,18 +230,43 @@ const App: React.FC = () => {
                 <div className="judge-icon-wrapper">
                   <Users size={40} color="var(--primary)" />
                 </div>
-                <h3 style={{ fontSize: '1.6rem', marginBottom: '0.5rem', fontWeight: 600 }}>{judge} 심사위원</h3>
-                <p style={{ color: 'var(--primary)', fontSize: '0.9rem', fontWeight: 'bold' }}>심사 시작하기 &rarr;</p>
+                <h3 style={{ fontSize: '1.6rem', marginBottom: '0.5rem', fontWeight: 600 }}>{judge.name} {judge.type !== 'observer' && '심사위원'}</h3>
+                <p style={{ color: 'var(--primary)', fontSize: '0.9rem', fontWeight: 'bold' }}>
+                  {judge.type === 'observer' ? '모니터링 하기 &rarr;' : '심사 시작하기 &rarr;'}
+                </p>
               </div>
             ))}
+            {(!activeAudition?.judges || activeAudition.judges.length === 0) && (
+              <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '3rem', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.02)', borderRadius: '16px' }}>
+                <p>등록된 심사위원이 없습니다. 상세 설정을 통해 심사위원을 추가하세요.</p>
+              </div>
+            )}
           </div>
 
-          {/* PIN Verification Modal */}
+          {/* Judge PIN Verification Modal */}
           {selectedJudgeToAuth && (
             <PinModal 
-              judgeName={selectedJudgeToAuth}
-              onVerify={(pin) => loginWithPin(selectedJudgeToAuth, pin)}
+              title={`${selectedJudgeToAuth.name} ${selectedJudgeToAuth.type !== 'observer' ? '심사위원' : ''}`}
+              onVerify={(pin) => loginWithPin(selectedJudgeToAuth.name, pin, activeAudition!)}
               onClose={() => setSelectedJudgeToAuth(null)}
+            />
+          )}
+
+          {/* Admin PIN Verification Modal */}
+          {isAdminPinModalOpen && (
+            <PinModal 
+              title="관리자 설정"
+              onVerify={handleAdminAuth}
+              onClose={() => setIsAdminPinModalOpen(false)}
+            />
+          )}
+
+          {/* Admin Settings Modal */}
+          {isSettingsModalOpen && activeAudition && (
+            <AuditionSettingsModal 
+              audition={activeAudition}
+              onSave={handleSaveSettings}
+              onClose={() => setIsSettingsModalOpen(false)}
             />
           )}
 
@@ -227,17 +283,32 @@ const App: React.FC = () => {
                   <h2 style={{ fontSize: '1.6rem' }}>새 오디션 생성</h2>
                 </div>
                 <form onSubmit={handleCreateAudition}>
-                  <input 
-                    autoFocus
-                    className="premium-input" 
-                    style={{ width: '100%', marginBottom: '1.5rem' }} 
-                    placeholder="오디션 이름 (예: 2024 버츄얼 아이돌 상반기)"
-                    value={newAuditionName}
-                    onChange={(e) => setNewAuditionName(e.target.value)}
-                  />
+                  <div style={{ marginBottom: '1.5rem' }}>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)' }}>오디션 이름</label>
+                    <input 
+                      autoFocus
+                      className="premium-input" 
+                      style={{ width: '100%' }} 
+                      placeholder="예: 2024년 1학기 라이브 클럽 오디션"
+                      value={newAuditionName}
+                      onChange={(e) => setNewAuditionName(e.target.value)}
+                    />
+                  </div>
+                  <div style={{ marginBottom: '2rem' }}>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)' }}>관리자 PIN (6자리)</label>
+                    <input 
+                      type="password"
+                      maxLength={6}
+                      className="premium-input" 
+                      style={{ width: '100%' }} 
+                      placeholder="기본값: 000000"
+                      value={newAdminPin}
+                      onChange={(e) => setNewAdminPin(e.target.value.replace(/[^0-9]/g, ''))}
+                    />
+                  </div>
                   <div style={{ display: 'flex', gap: '1rem' }}>
                     <button type="button" className="premium-button secondary-btn" style={{ flex: 1 }} onClick={() => setIsAddingAudition(false)}>취소</button>
-                    <button type="submit" className="premium-button" style={{ flex: 1 }}>생성하기</button>
+                    <button type="submit" className="premium-button" style={{ flex: 1 }} disabled={!newAuditionName.trim() || newAdminPin.length !== 6}>생성하기</button>
                   </div>
                 </form>
               </div>
@@ -246,6 +317,7 @@ const App: React.FC = () => {
         </div>
       ) : (
         <div className="dashboard fade-in">
+          {/* Dashboard Code (same mostly, slightly refactored with activeAudition logic) */}
           <div className="dashboard-header">
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -276,19 +348,18 @@ const App: React.FC = () => {
             </div>
 
           <div className="dashboard-content">
-            {/* Input Section */}
             <section style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
               {!isObserver && (
                 <div className="glass-card fade-in">
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', marginBottom: '1.5rem' }}>
                     <UserPlus size={22} color="var(--primary)" />
-                    <h3 style={{ fontSize: '1.4rem' }}>새 참가자 등록</h3>
+                    <h3 style={{ fontSize: '1.4rem' }}>새 팀 등록</h3>
                   </div>
                   <form onSubmit={addCandidate} className="flex-column" style={{ gap: '1rem' }}>
                     <div className="input-row" style={{ display: 'flex', gap: '1rem' }}>
                       <input 
                         className="premium-input" 
-                        placeholder="참가자 이름" 
+                        placeholder="팀 이름" 
                         value={newCandidateName} 
                         onChange={(e) => setNewCandidateName(e.target.value)} 
                       />
@@ -299,7 +370,7 @@ const App: React.FC = () => {
                         onChange={(e) => setNewSongTitle(e.target.value)} 
                       />
                     </div>
-                    <button type="submit" className="premium-button">참가자 등록</button>
+                    <button type="submit" className="premium-button">팀 등록</button>
                   </form>
                 </div>
               )}
@@ -311,9 +382,8 @@ const App: React.FC = () => {
                   paddingLeft: '1rem',
                   marginBottom: '0.5rem'
                 }}>
-                  {isObserver ? '실시간 참가자 현황' : (SIMPLE_JUDGES.includes(currentJudge!) ? '단순 합산 채점' : '항목별 세부 채점')}
+                  {isObserver ? '실시간 참가 현황' : '채점 진행 중인 팀'}
                 </h3>
-                {/* In-progress Candidates */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                   {candidates
                     .filter(c => !currentJudge || !(c.scores[currentJudge]?.isCompleted))
@@ -322,6 +392,7 @@ const App: React.FC = () => {
                         key={candidate.id}
                         candidate={candidate}
                         selectedJudge={currentJudge!}
+                        activeAudition={activeAudition!}
                         isObserver={isObserver}
                         getJudgeTotal={getJudgeTotal}
                         editingSongId={editingSongId}
@@ -345,7 +416,6 @@ const App: React.FC = () => {
                     ))}
                 </div>
 
-                {/* Completed Candidates Section (Accordion) */}
                 {candidates.some(c => currentJudge && c.scores[currentJudge]?.isCompleted) && (
                   <div className="glass-card fade-in" style={{ marginTop: '2rem', padding: '1rem', background: 'rgba(34, 197, 94, 0.03)', border: '1px solid rgba(34, 197, 94, 0.1)' }}>
                     <div 
@@ -361,7 +431,7 @@ const App: React.FC = () => {
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem' }}>
                         <CheckCircle size={20} color="#22c55e" />
                         <h3 style={{ fontSize: '1.2rem', color: '#22c55e' }}>
-                          심사 완료된 참가자 ({candidates.filter(c => currentJudge && c.scores[currentJudge]?.isCompleted).length}명)
+                          심사 완료된 팀 ({candidates.filter(c => currentJudge && c.scores[currentJudge]?.isCompleted).length}팀)
                         </h3>
                       </div>
                       {isCompletedExpanded ? <ChevronUp size={20} color="#22c55e" /> : <ChevronDown size={20} color="#22c55e" />}
@@ -376,6 +446,7 @@ const App: React.FC = () => {
                               key={candidate.id}
                               candidate={candidate}
                               selectedJudge={currentJudge!}
+                              activeAudition={activeAudition!}
                               isObserver={isObserver}
                               getJudgeTotal={getJudgeTotal}
                               editingSongId={editingSongId}
@@ -401,7 +472,6 @@ const App: React.FC = () => {
                     )}
                   </div>
                 )}
-
               </div>
             </section>
 
@@ -409,16 +479,16 @@ const App: React.FC = () => {
               <div className="glass-card" style={{ padding: '1rem', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.05)' }}>
                 <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.8rem', fontWeight: 500 }}>리더보드 반영 심사위원 선택</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.8rem' }}>
-                  {JUDGES.filter(j => j !== '참관자').map(j => {
-                    const isActive = activeJudges.includes(j);
+                  {activeAudition?.judges.filter(j => j.type !== 'observer').map(j => {
+                    const isActive = activeJudges.includes(j.name);
                     return (
                       <button 
-                        key={j}
+                        key={j.name}
                         onClick={() => {
                           if (!activeAuditionId) return;
                           const newActive = isActive 
-                            ? activeJudges.filter(aj => aj !== j)
-                            : [...activeJudges, j];
+                            ? activeJudges.filter(aj => aj !== j.name)
+                            : [...activeJudges, j.name];
                           firebaseService.updateActiveJudges(activeAuditionId, newActive);
                         }}
                         style={{
@@ -434,13 +504,13 @@ const App: React.FC = () => {
                           color: isActive ? 'var(--primary)' : 'var(--text-muted)',
                         }}
                       >
-                        {j} {isActive ? 'ON' : 'OFF'}
+                        {j.name} {isActive ? 'ON' : 'OFF'}
                       </button>
                     );
                   })}
                 </div>
               </div>
-              <Leaderboard sortedCandidates={sortedCandidates} />
+              <Leaderboard sortedCandidates={sortedCandidates} activeAudition={activeAudition!} />
             </div>
           </div>
 
@@ -449,18 +519,15 @@ const App: React.FC = () => {
           </div>
         </div>
       )}
-    <footer style={{ 
-      marginTop: '4rem', 
-      padding: '2rem 0', 
-      borderTop: '1px solid rgba(255,255,255,0.05)',
-      textAlign: 'center',
-      color: 'rgba(255,255,255,0.3)',
-      fontSize: '0.9rem',
-      letterSpacing: '1px'
-    }}>
-      <p>Developed by <strong>Kim Junmo</strong></p>
-      <p style={{ fontSize: '0.75rem', marginTop: '0.5rem', opacity: 0.5 }}>© 2024 Audition Master. All rights reserved.</p>
-    </footer>
+      <footer style={{ 
+        marginTop: '4rem', padding: '2rem 0', 
+        borderTop: '1px solid rgba(255,255,255,0.05)',
+        textAlign: 'center', color: 'rgba(255,255,255,0.3)',
+        fontSize: '0.9rem', letterSpacing: '1px'
+      }}>
+        <p>Developed by <strong>Kim Junmo</strong></p>
+        <p style={{ fontSize: '0.75rem', marginTop: '0.5rem', opacity: 0.5 }}>© 2024 Audition Master. All rights reserved.</p>
+      </footer>
     </div>
   );
 };

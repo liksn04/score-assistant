@@ -1,14 +1,14 @@
 import React from 'react';
 import { X, Trash2, CheckCircle2, RotateCcw } from 'lucide-react';
-import type { Candidate, JudgeName, EvaluationItem } from '../../types';
-import { EVALUATION_ITEMS, JUDGE_SCORE_LIMITS, SIMPLE_JUDGES } from '../../types';
+import type { Candidate, Audition } from '../../types';
 import CommentSection from './CommentSection';
 
 interface CandidateScoreCardProps {
   candidate: Candidate;
-  selectedJudge: JudgeName;
+  selectedJudge: string;
+  activeAudition: Audition;
   isObserver: boolean;
-  getJudgeTotal: (candidate: Candidate, judge: JudgeName) => number;
+  getJudgeTotal: (candidate: Candidate, judge: string) => number;
   editingSongId: string | null;
   setEditingSongId: (id: string | null) => void;
   tempSongTitle: string;
@@ -16,7 +16,7 @@ interface CandidateScoreCardProps {
   updateSongTitle: (id: string, title: string) => void;
   deleteCandidate: (id: string, name: string) => void;
   updateSimpleScore: (id: string, value: string) => void;
-  updateDetailScore: (id: string, item: EvaluationItem, value: string) => void;
+  updateDetailScore: (id: string, item: string, value: string) => void;
   updateItemStrikes: (id: string, item: string, delta: number) => void;
   commentInput: string;
   isCommentExpanded: boolean;
@@ -31,6 +31,7 @@ interface CandidateScoreCardProps {
 const CandidateScoreCard: React.FC<CandidateScoreCardProps> = ({
   candidate,
   selectedJudge,
+  activeAudition,
   isObserver,
   getJudgeTotal,
   editingSongId,
@@ -52,6 +53,7 @@ const CandidateScoreCard: React.FC<CandidateScoreCardProps> = ({
   isReadOnly = false
 }) => {
   const isCompleted = candidate.scores[selectedJudge]?.isCompleted || false;
+  const judgeConfig = activeAudition.judges.find(j => j.name === selectedJudge);
 
   return (
     <div className="glass-card candidate-row">
@@ -110,7 +112,13 @@ const CandidateScoreCard: React.FC<CandidateScoreCardProps> = ({
             {isObserver ? '평균: ' : '총점: '}
             <strong style={{ color: 'var(--primary)', fontSize: '1.1rem' }}>
               {isObserver ? candidate.average : getJudgeTotal(candidate, selectedJudge)}
-            </strong>/100
+            </strong>
+            {(!isObserver && judgeConfig && judgeConfig.type === 'detail') && 
+              <span style={{ fontSize: '0.75rem', marginLeft: '2px' }}>
+                / {judgeConfig.criteria?.reduce((sum, c) => sum + c.maxScore, 0) || 100}
+              </span>
+            }
+            {(!isObserver && (!judgeConfig || judgeConfig.type === 'simple')) && <span style={{ fontSize: '0.75rem', marginLeft: '2px' }}>/ 100</span>}
           </span>
           {!isObserver && !isReadOnly && (
             <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -147,8 +155,8 @@ const CandidateScoreCard: React.FC<CandidateScoreCardProps> = ({
       </div>
 
       {/* Scoring Section */}
-      {!isObserver && (
-        SIMPLE_JUDGES.includes(selectedJudge) ? (
+      {!isObserver && judgeConfig && (
+        judgeConfig.type === 'simple' ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginTop: '1rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
               <label style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>총점 입력 (0~100):</label>
@@ -195,34 +203,34 @@ const CandidateScoreCard: React.FC<CandidateScoreCardProps> = ({
               </div>
             )}
           </div>
-        ) : (
-          <div className="scoring-grid">
-            {EVALUATION_ITEMS.map((item: EvaluationItem) => (
-              <div key={item} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255, 255, 255, 0.02)', padding: '0.8rem', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.03)' }}>
-                <label style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', flex: 1 }}>{item} ({JUDGE_SCORE_LIMITS[selectedJudge][item]})</label>
+        ) : judgeConfig.type === 'detail' && judgeConfig.criteria ? (
+          <div className="scoring-grid" style={{ marginTop: '1rem' }}>
+            {judgeConfig.criteria.map((criterion) => (
+              <div key={criterion.item} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255, 255, 255, 0.02)', padding: '0.8rem', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.03)' }}>
+                <label style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', flex: 1 }}>{criterion.item} ({criterion.maxScore})</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                   <input 
                     type="number" 
                     className="premium-input score-input" 
                     style={{ width: '60px', padding: '6px', textAlign: 'center', fontSize: '0.9rem' }} 
                     min="0" 
-                    max={JUDGE_SCORE_LIMITS[selectedJudge][item]} 
-                    value={candidate.scores[selectedJudge]?.[item] ?? ''} 
-                    onChange={(e) => updateDetailScore(candidate.id, item, e.target.value)} 
+                    max={criterion.maxScore} 
+                    value={candidate.scores[selectedJudge]?.[criterion.item] ?? ''} 
+                    onChange={(e) => updateDetailScore(candidate.id, criterion.item, e.target.value)} 
                     disabled={isReadOnly}
                   />
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                     {!isReadOnly && (
-                      <button onClick={() => updateItemStrikes(candidate.id, item, 1)} style={{ background: 'rgba(244, 63, 94, 0.15)', border: '1px solid rgba(244, 63, 94, 0.2)', color: '#f43f5e', borderRadius: '6px', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={14} strokeWidth={3} /></button>
+                      <button onClick={() => updateItemStrikes(candidate.id, criterion.item, 1)} style={{ background: 'rgba(244, 63, 94, 0.15)', border: '1px solid rgba(244, 63, 94, 0.2)', color: '#f43f5e', borderRadius: '6px', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={14} strokeWidth={3} /></button>
                     )}
-                    <div style={{ display: 'flex', gap: '1px' }}>{Array.from({ length: candidate.scores[selectedJudge]?.itemStrikes?.[item] || 0 }).map((_: any, i: number) => (<X key={i} size={14} color="#f43f5e" strokeWidth={3} />))}</div>
-                    {!isReadOnly && (candidate.scores[selectedJudge]?.itemStrikes?.[item] || 0) > 0 && (<button onClick={() => updateItemStrikes(candidate.id, item, -1)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.65rem' }}>-</button>)}
+                    <div style={{ display: 'flex', gap: '1px' }}>{Array.from({ length: candidate.scores[selectedJudge]?.itemStrikes?.[criterion.item] || 0 }).map((_: any, i: number) => (<X key={i} size={14} color="#f43f5e" strokeWidth={3} />))}</div>
+                    {!isReadOnly && (candidate.scores[selectedJudge]?.itemStrikes?.[criterion.item] || 0) > 0 && (<button onClick={() => updateItemStrikes(candidate.id, criterion.item, -1)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.65rem' }}>-</button>)}
                   </div>
                 </div>
               </div>
             ))}
           </div>
-        )
+        ) : null
       )}
 
       {/* Sub-sections */}
@@ -236,7 +244,6 @@ const CandidateScoreCard: React.FC<CandidateScoreCardProps> = ({
         onAddComment={onAddComment}
         onDeleteComment={onDeleteComment}
       />
-
     </div>
   );
 };

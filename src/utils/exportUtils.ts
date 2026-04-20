@@ -1,8 +1,7 @@
 import * as XLSX from 'xlsx';
-import type { Candidate, EvaluationItem } from '../types';
-import { JUDGES, EVALUATION_ITEMS, SIMPLE_JUDGES } from '../types';
+import type { Candidate, Audition } from '../types';
 
-export const exportToExcel = (candidates: Candidate[], auditionName: string) => {
+export const exportToExcel = (candidates: Candidate[], audition: Audition) => {
   // 데이터 변환: 엑셀 행 구조 설계
   const data = candidates.map((c, index) => {
     const row: any = {
@@ -14,27 +13,27 @@ export const exportToExcel = (candidates: Candidate[], auditionName: string) => 
     };
 
     // 심사위원별 상세 점수 추가
-    JUDGES.forEach(judge => {
-      const scores = c.scores[judge];
+    audition.judges.forEach(judge => {
+      const scores = c.scores[judge.name];
       if (!scores) {
-        row[`${judge}_총점`] = 0;
+        if (judge.type !== 'observer') row[`${judge.name}_총점`] = 0;
         return;
       }
 
-      if (SIMPLE_JUDGES.includes(judge)) {
-        row[`${judge}_총점`] = scores.simpleTotal || 0;
-      } else {
+      if (judge.type === 'simple') {
+        row[`${judge.name}_총점`] = scores.simpleTotal || 0;
+      } else if (judge.type === 'detail') {
         // 항목별 점수
-        EVALUATION_ITEMS.forEach((item: EvaluationItem) => {
-          row[`${judge}_${item}`] = scores[item] || 0;
+        judge.criteria?.forEach(cItem => {
+          row[`${judge.name}_${cItem.item}`] = scores[cItem.item] || 0;
         });
         
         // 심사위원별 합계 계산
-        const judgeTotal = EVALUATION_ITEMS.reduce((sum, item) => sum + (Number(scores[item]) || 0), 0);
-        row[`${judge}_총점`] = judgeTotal;
+        const judgeTotal = judge.criteria?.reduce((sum, cItem) => sum + (Number(scores[cItem.item]) || 0), 0) || 0;
+        row[`${judge.name}_총점`] = judgeTotal;
       }
       
-      row[`${judge}_완료여부`] = scores.isCompleted ? '완료' : '진행중';
+      row[`${judge.name}_완료여부`] = scores.isCompleted ? '완료' : '진행중';
     });
 
     return row;
@@ -57,6 +56,6 @@ export const exportToExcel = (candidates: Candidate[], auditionName: string) => 
   worksheet['!cols'] = Object.keys(maxWidths).map(i => ({ wch: maxWidths[i] }));
 
   // 파일 다운로드
-  const fileName = `${auditionName.replace(/\s+/g, '_')}_심사결과_${new Date().toISOString().split('T')[0]}.xlsx`;
+  const fileName = `${audition.name.replace(/\s+/g, '_')}_심사결과_${new Date().toISOString().split('T')[0]}.xlsx`;
   XLSX.writeFile(workbook, fileName);
 };

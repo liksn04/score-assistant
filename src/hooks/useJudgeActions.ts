@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { firebaseService } from '../api/firebaseService';
-import type { Candidate, JudgeName, EvaluationItem } from '../types';
-import { JUDGE_SCORE_LIMITS } from '../types';
+import type { Candidate, Audition } from '../types';
 
-export const useJudgeActions = (candidates: Candidate[], auditionId: string | null) => {
-  const [selectedJudge, setSelectedJudge] = useState<JudgeName | null>(null);
-  const isObserver = selectedJudge === '참관자';
+export const useJudgeActions = (candidates: Candidate[], audition: Audition | null) => {
+  const [selectedJudge, setSelectedJudge] = useState<string | null>(null);
+  
+  const judgeConfig = audition?.judges?.find(j => j.name === selectedJudge);
+  const isObserver = judgeConfig?.type === 'observer';
   
   const [newCandidateName, setNewCandidateName] = useState('');
   const [newSongTitle, setNewSongTitle] = useState('');
@@ -17,9 +18,9 @@ export const useJudgeActions = (candidates: Candidate[], auditionId: string | nu
   // 참가자 추가
   const addCandidate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newCandidateName.trim() || !auditionId) return;
+    if (!newCandidateName.trim() || !audition) return;
     try {
-      await firebaseService.addCandidate(newCandidateName, newSongTitle, auditionId);
+      await firebaseService.addCandidate(newCandidateName, newSongTitle, audition);
       setNewCandidateName('');
       setNewSongTitle('');
     } catch (error) {
@@ -29,7 +30,7 @@ export const useJudgeActions = (candidates: Candidate[], auditionId: string | nu
 
   // 단순 점수 업데이트
   const updateSimpleScore = async (candidateId: string, scoreStr: string) => {
-    if (!selectedJudge) return;
+    if (!selectedJudge || !audition) return;
     let score: number | null = scoreStr.trim() === "" ? null : parseInt(scoreStr);
     if (score !== null && (isNaN(score) || score < 0 || score > 100)) {
        alert("0에서 100 사이의 숫자를 입력해주세요.");
@@ -38,17 +39,19 @@ export const useJudgeActions = (candidates: Candidate[], auditionId: string | nu
     const candidate = candidates.find(c => c.id === candidateId);
     if (!candidate) return;
     try {
-      await firebaseService.updateSimpleScore(candidate, selectedJudge, score);
+      await firebaseService.updateSimpleScore(candidate, selectedJudge, score, audition);
     } catch (error) {
       console.error("단순 점수 업데이트 오류:", error);
     }
   };
 
   // 세부 점수 업데이트
-  const updateDetailScore = async (candidateId: string, item: EvaluationItem, scoreStr: string) => {
-    if (!selectedJudge) return;
+  const updateDetailScore = async (candidateId: string, item: string, scoreStr: string) => {
+    if (!selectedJudge || !audition || !judgeConfig) return;
     let score: number | null = scoreStr.trim() === "" ? null : parseInt(scoreStr);
-    const maxScore = JUDGE_SCORE_LIMITS[selectedJudge][item];
+    const criterion = judgeConfig.criteria?.find(c => c.item === item);
+    const maxScore = criterion ? criterion.maxScore : 100;
+
     if (score !== null && (isNaN(score) || score < 0 || score > maxScore)) {
       alert(`0에서 ${maxScore} 사이의 숫자를 입력해주세요. (${item} 항목 한도: ${maxScore}점)`);
       return;
@@ -56,7 +59,7 @@ export const useJudgeActions = (candidates: Candidate[], auditionId: string | nu
     const candidate = candidates.find(c => c.id === candidateId);
     if (!candidate) return;
     try {
-      await firebaseService.updateDetailScore(candidate, selectedJudge, item, score);
+      await firebaseService.updateDetailScore(candidate, selectedJudge, item, score, audition);
     } catch (error) {
       console.error("점수 업데이트 오류:", error);
     }
@@ -82,7 +85,6 @@ export const useJudgeActions = (candidates: Candidate[], auditionId: string | nu
       console.error("코멘트 삭제 오류:", error);
     }
   };
-
 
   // 기타 액션
   const updateItemStrikes = async (candidateId: string, item: string, increment: number) => {

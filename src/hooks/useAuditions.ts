@@ -45,6 +45,9 @@ export const useAuditions = () => {
           name: d.name,
           status: d.status || 'active',
           activeJudges: d.activeJudges || [],
+          judges: d.judges || [],
+          dropCount: d.dropCount || 0,
+          adminPin: d.adminPin || '000000',
           createdAt: d.createdAt,
           updatedAt: d.updatedAt
         };
@@ -53,7 +56,7 @@ export const useAuditions = () => {
       setAuditions(data);
       
       if (data.length === 0 && !isLoading) {
-        const newAudition = await firebaseService.createAudition("기본 오디션");
+        const newAudition = await firebaseService.createAudition("기본 오디션", "000000");
         setActiveAuditionId(newAudition.id);
         await migrateLegacyCandidates(newAudition.id);
       } else if (!activeAuditionId && data.length > 0) {

@@ -9,30 +9,38 @@ import {
   arrayRemove
 } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
-import type { Candidate, JudgeName, EvaluationItem } from '../types';
-import { JUDGES, EVALUATION_ITEMS, SIMPLE_JUDGES } from '../types';
+import type { Candidate, Audition, JudgeConfig } from '../types';
 
 /**
- * 전제 심사위원 점수를 기반으로 총점과 평균을 계산하는 내부 유틸리티
+ * 전체 심사위원 점수를 기반으로 총점과 평균을 계산하는 내부 유틸리티
  */
-const calculateTotalAndAverage = (scores: Record<string, any>) => {
+const calculateTotalAndAverage = (scores: Record<string, any>, audition: Audition) => {
   let overallTotal = 0;
   let judgeCount = 0;
 
-  JUDGES.forEach(j => {
-    const jScores = scores[j];
+  // activeJudges에 포함된 심사위원만 합산 (없으면 모두 합산)
+  const judgesToCount = audition.activeJudges && audition.activeJudges.length > 0 
+    ? audition.activeJudges 
+    : audition.judges.map(j => j.name);
+
+  judgesToCount.forEach(judgeName => {
+    const judgeConfig = audition.judges.find(j => j.name === judgeName);
+    if (!judgeConfig || judgeConfig.type === 'observer') return;
+
+    const jScores = scores[judgeName];
     if (!jScores) return;
 
     let jTotal = 0;
     let hasScore = false;
 
-    if (SIMPLE_JUDGES.includes(j)) {
+    if (judgeConfig.type === 'simple') {
       if (jScores.simpleTotal !== null && jScores.simpleTotal !== undefined) {
         jTotal = jScores.simpleTotal;
         hasScore = true;
       }
-    } else {
-      const validValues = EVALUATION_ITEMS.map(item => jScores[item]).filter((v): v is number => v !== null);
+    } else if (judgeConfig.type === 'detail') {
+      const items = judgeConfig.criteria?.map(c => c.item) || [];
+      const validValues = items.map(item => jScores[item]).filter((v): v is number => v !== null && v !== undefined);
       if (validValues.length > 0) {
         jTotal = validValues.reduce((a, b) => a + b, 0);
         hasScore = true;
@@ -51,12 +59,14 @@ const calculateTotalAndAverage = (scores: Record<string, any>) => {
 
 export const firebaseService = {
   // 오디션 관리
-  async createAudition(name: string) {
-    const defaultActiveJudges = JUDGES.filter(j => j !== '참관자');
+  async createAudition(name: string, adminPin: string) {
     return await addDoc(collection(db, 'auditions'), {
       name,
       status: 'active',
-      activeJudges: defaultActiveJudges,
+      activeJudges: [],
+      judges: [],
+      dropCount: 0,
+      adminPin,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     });
@@ -76,28 +86,40 @@ export const firebaseService = {
     });
   },
 
-  async updateActiveJudges(id: string, judges: JudgeName[]) {
+  async updateActiveJudges(id: string, activeJudges: string[]) {
     return await updateDoc(doc(db, 'auditions', id), {
-      activeJudges: judges,
+      activeJudges,
+      updatedAt: serverTimestamp()
+    });
+  },
+
+  async updateAuditionSettings(id: string, judges: JudgeConfig[], dropCount: number) {
+    return await updateDoc(doc(db, 'auditions', id), {
+      judges,
+      dropCount,
       updatedAt: serverTimestamp()
     });
   },
 
   // 참가자 추가
-  async addCandidate(name: string, song: string, auditionId: string) {
+  async addCandidate(name: string, song: string, audition: Audition) {
     const initialScores: any = {};
-    JUDGES.forEach(j => {
-      initialScores[j] = { strikes: 0, itemStrikes: {} };
-      EVALUATION_ITEMS.forEach(item => {
-        initialScores[j][item] = null;
-        initialScores[j].itemStrikes[item] = 0;
-      });
+    audition.judges.forEach(j => {
+      initialScores[j.name] = { strikes: 0, itemStrikes: {} };
+      if (j.type === 'detail' && j.criteria) {
+        j.criteria.forEach(c => {
+          initialScores[j.name][c.item] = null;
+          initialScores[j.name].itemStrikes[c.item] = 0;
+        });
+      } else if (j.type === 'simple') {
+        initialScores[j.name].simpleTotal = null;
+      }
     });
 
     return await addDoc(collection(db, 'candidates'), {
       name,
       song,
-      auditionId,
+      auditionId: audition.id,
       scores: initialScores,
       total: 0,
       average: 0,
@@ -107,18 +129,18 @@ export const firebaseService = {
   },
 
   // 구체적인 점수 업데이트 (세부 항목)
-  async updateDetailScore(candidate: Candidate, judge: JudgeName, item: EvaluationItem, score: number | null) {
+  async updateDetailScore(candidate: Candidate, judgeName: string, item: string, score: number | null, audition: Audition) {
     const updatedJudgeScores = { 
-      ...candidate.scores[judge], 
+      ...candidate.scores[judgeName], 
       [item]: score 
     };
     
     const newScores = {
       ...candidate.scores,
-      [judge]: updatedJudgeScores
+      [judgeName]: updatedJudgeScores
     };
 
-    const { total, average } = calculateTotalAndAverage(newScores);
+    const { total, average } = calculateTotalAndAverage(newScores, audition);
 
     return await updateDoc(doc(db, 'candidates', candidate.id), {
       scores: newScores,
@@ -129,16 +151,16 @@ export const firebaseService = {
   },
 
   // 단순 점수 업데이트 (100점 만점)
-  async updateSimpleScore(candidate: Candidate, judge: JudgeName, score: number | null) {
+  async updateSimpleScore(candidate: Candidate, judgeName: string, score: number | null, audition: Audition) {
     const newScores = {
       ...candidate.scores,
-      [judge]: { 
-        ...candidate.scores[judge], 
+      [judgeName]: { 
+        ...candidate.scores[judgeName], 
         simpleTotal: score 
       }
     };
 
-    const { total, average } = calculateTotalAndAverage(newScores);
+    const { total, average } = calculateTotalAndAverage(newScores, audition);
 
     return await updateDoc(doc(db, 'candidates', candidate.id), {
       scores: newScores,
@@ -162,12 +184,12 @@ export const firebaseService = {
   },
 
   // 스트라이크(X) 업데이트
-  async updateItemStrikes(candidate: Candidate, judge: JudgeName, item: string, newVal: number) {
-    const currentItemStrikes = candidate.scores[judge]?.itemStrikes || {};
+  async updateItemStrikes(candidate: Candidate, judgeName: string, item: string, newVal: number) {
+    const currentItemStrikes = candidate.scores[judgeName]?.itemStrikes || {};
     const newScores = {
       ...candidate.scores,
-      [judge]: {
-        ...candidate.scores[judge],
+      [judgeName]: {
+        ...candidate.scores[judgeName],
         itemStrikes: {
           ...currentItemStrikes,
           [item]: newVal
@@ -181,10 +203,10 @@ export const firebaseService = {
   },
 
   // 코멘트 추가
-  async addComment(candidateId: string, judge: JudgeName, content: string) {
+  async addComment(candidateId: string, judgeName: string, content: string) {
     const newComment = {
       id: Math.random().toString(36).substr(2, 9),
-      author: judge,
+      author: judgeName,
       content: content.trim(),
       createdAt: new Date().toISOString(),
     };
@@ -203,9 +225,9 @@ export const firebaseService = {
   },
 
   // 심사 완료 상태 토글
-  async toggleJudgeCompletion(candidateId: string, judge: JudgeName, currentStatus: boolean) {
+  async toggleJudgeCompletion(candidateId: string, judgeName: string, currentStatus: boolean) {
     return await updateDoc(doc(db, 'candidates', candidateId), {
-      [`scores.${judge}.isCompleted`]: !currentStatus,
+      [`scores.${judgeName}.isCompleted`]: !currentStatus,
       updatedAt: serverTimestamp()
     });
   }

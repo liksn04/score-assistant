@@ -1,14 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Lock, X, Loader2, ShieldCheck } from 'lucide-react';
-import type { JudgeName } from '../../types';
 
 interface PinModalProps {
-  judgeName: JudgeName;
+  title: string;
   onVerify: (pin: string) => Promise<boolean>;
   onClose: () => void;
 }
 
-const PinModal: React.FC<PinModalProps> = ({ judgeName, onVerify, onClose }) => {
+const PinModal: React.FC<PinModalProps> = ({ title, onVerify, onClose }) => {
   const [pin, setPin] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -92,8 +91,8 @@ const PinModal: React.FC<PinModalProps> = ({ judgeName, onVerify, onClose }) => 
           }}>
             <Lock size={32} color="var(--primary)" />
           </div>
-          <h2 style={{ fontSize: '1.8rem', marginBottom: '0.6rem', letterSpacing: '-0.5px' }}>{judgeName} 심사위원</h2>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>인증을 위한 6자리 PIN을 입력하세요.</p>
+          <h2 style={{ fontSize: '1.8rem', marginBottom: '0.6rem', letterSpacing: '-0.5px' }}>{title}</h2>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>인증을 위한 6자리 (또는 지정된) PIN을 입력하세요.</p>
         </div>
 
         <form onSubmit={handleSubmit} style={{ position: 'relative' }}>

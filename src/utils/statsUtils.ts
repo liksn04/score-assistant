@@ -1,57 +1,49 @@
-import type { Candidate, JudgeName } from '../types';
-import { JUDGES, SIMPLE_JUDGES, EVALUATION_ITEMS } from '../types';
-
-export interface JudgeStats {
-  judgeName: JudgeName;
-  averageScore: number;
-  participationRate: number;
-  avgDeviation: number; // 전체 평균 대비 해당 심사위원의 평균 편차
-}
-
-export interface CandidateStats {
-  candidateId: string;
-  candidateName: string;
-  standardDeviation: number; // 심사위원 간 점수의 표준편차 (점수가 고른지 확인)
-  spread: number; // 최고점 - 최저점
-}
+import type { Candidate, Audition } from '../types';
 
 /**
  * 특정 심사위원이 특정 참가자에게 부여한 합계 점수를 계산합니다.
  */
-export const getJudgeScore = (candidate: Candidate, judge: JudgeName) => {
-  const s = candidate.scores[judge];
+export const getJudgeScore = (candidate: Candidate, judgeName: string, audition: Audition) => {
+  const s = candidate.scores[judgeName];
   if (!s || !s.isCompleted) return null;
-  if (SIMPLE_JUDGES.includes(judge)) return s.simpleTotal || 0;
   
-  // 상세 심사위원은 각 항목의 합계를 계산
-  return EVALUATION_ITEMS.reduce((sum: number, item) => sum + (Number((s as any)[item]) || 0), 0);
+  const judgeConfig = audition.judges.find(j => j.name === judgeName);
+  if (!judgeConfig) return null;
+
+  if (judgeConfig.type === 'simple') return s.simpleTotal || 0;
+  
+  if (judgeConfig.type === 'detail') {
+    const items = judgeConfig.criteria?.map(c => c.item) || [];
+    return items.reduce((sum: number, item) => sum + (Number((s as any)[item]) || 0), 0);
+  }
+
+  return null;
 };
 
-export const calculateStats = (candidates: Candidate[]) => {
-  if (candidates.length === 0) return null;
+export const calculateStats = (candidates: Candidate[], audition: Audition) => {
+  if (candidates.length === 0 || !audition) return null;
 
-  // 1. 심사위원별 통계 (점수를 매기지 않는 '참관자'는 제외)
-  const judgeStats = JUDGES
-    .filter(judge => judge !== '참관자')
-    .map(judge => {
-      const scores = candidates
-        .map(c => getJudgeScore(c, judge))
-        .filter((s): s is number => s !== null);
+  const validJudges = audition.judges.filter(j => j.type !== 'observer').map(j => j.name);
 
-      const average = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
+  // 1. 심사위원별 통계 (점수를 매기지 않는 '참관자' 제외)
+  const judgeStats = validJudges.map(judge => {
+    const scores = candidates
+      .map(c => getJudgeScore(c, judge, audition))
+      .filter((s): s is number => s !== null);
+
+    const average = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
       
-      return {
-        judgeName: judge,
-        averageScore: Number(average.toFixed(1)),
-        count: scores.length
-      };
-    });
+    return {
+      judgeName: judge,
+      averageScore: Number(average.toFixed(1)),
+      count: scores.length
+    };
+  });
 
   // 2. 후보자별 심사위원 간 편차
   const candidateStats = candidates.map(c => {
-    const judgeScores = JUDGES
-      .filter(j => j !== '참관자')
-      .map(j => getJudgeScore(c, j))
+    const judgeScores = validJudges
+      .map(j => getJudgeScore(c, j, audition))
       .filter((s): s is number => s !== null);
 
     if (judgeScores.length < 2) return { id: c.id, name: c.name, std: 0, spread: 0 };

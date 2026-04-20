@@ -1,65 +1,53 @@
-export type JudgeName = "준모" | "정현" | "진하" | "참관자";
+export interface Criterion {
+  item: string;
+  maxScore: number;
+}
 
-export const EVALUATION_ITEMS = ["박자", "음정", "가사", "긴장", "즐김"] as const;
-export type EvaluationItem = typeof EVALUATION_ITEMS[number];
+export type JudgeType = 'detail' | 'simple' | 'observer';
 
-// EvaluationScores can hold detailed items or a single simple score
-// To maintain compatibility, we'll store the simple score in a field named 'total'
-export type EvaluationScores = Record<EvaluationItem, number | null> & {
+export interface JudgeConfig {
+  name: string;
+  pin: string;
+  type: JudgeType;
+  criteria?: Criterion[];
+}
+
+export type EvaluationScores = Record<string, any> & {
   simpleTotal?: number | null;
-  strikes?: number; // 전체 스트라이크 (하위 호환성 유지)
-  itemStrikes?: Record<string, number>; // 항목별 스트라이크
+  strikes?: number;
+  itemStrikes?: Record<string, number>;
   isCompleted?: boolean;
-};
-
-// 단순 채점 방식을 사용하는 심사위원 명단
-export const SIMPLE_JUDGES: JudgeName[] = ["정현", "참관자"];
-
-// 심사위원별 세부 항목 배점 한도 (100점 만점 기준 배분)
-export const JUDGE_SCORE_LIMITS: Record<JudgeName, Record<EvaluationItem, number>> = {
-  "준모": { "박자": 20, "음정": 20, "가사": 20, "긴장": 20, "즐김": 20 },
-  "정현": { "박자": 20, "음정": 20, "가사": 20, "긴장": 20, "즐김": 20 },
-  "진하": { "박자": 30, "음정": 30, "가사": 10, "긴장": 15, "즐김": 15 },
-  "참관자": { "박자": 0, "음정": 0, "가사": 0, "긴장": 0, "즐김": 0 }
 };
 
 export interface Comment {
   id: string;
-  author: JudgeName;
+  author: string;
   content: string;
   createdAt: any;
 }
-
 
 export interface Audition {
   id: string;
   name: string;
   status: 'active' | 'archived';
-  activeJudges?: JudgeName[]; // 리더보드에 반영할 활성 심사위원 목록
+  activeJudges?: string[]; // 리더보드에 반영할 활성 심사위원 목록
+  judges: JudgeConfig[];   // 동적 심사위원 설정
+  dropCount: number;       // 하위 N팀 탈락 기준
+  adminPin: string;        // 관리자 패널 접근용 PIN
   createdAt: any;
   updatedAt: any;
 }
 
 export interface Candidate {
   id: string;
-  auditionId?: string; // 오디션 식별자 추가
+  auditionId?: string;
   name: string;
   song?: string;
-  // 심사위원별 점수 저장
-  scores: Record<JudgeName, EvaluationScores>;
-  comments?: Comment[]; // 선택적 필드로 추가 (기존 데이터 호환성)
+  scores: Record<string, EvaluationScores>;
+  comments?: Comment[];
   total: number;
   average: number;
   createdAt?: any;
   updatedAt: any;
 }
 
-export const JUDGES: JudgeName[] = ["준모", "정현", "진하", "참관자"];
-
-// 심사위원별 6자리 PIN 번호 매핑
-export const JUDGE_PINS: Record<JudgeName, string> = {
-  '준모': '111111',
-  '진하': '222222',
-  '정현': '333333',
-  '참관자': '000000'
-};

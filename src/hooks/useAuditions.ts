@@ -6,10 +6,11 @@ import { firebaseService } from '../api/firebaseService';
 import type { Audition } from '../types';
 import { mapAuditionRecord } from '../utils/auditionModel.ts';
 
-export const useAuditions = () => {
+export const useAuditions = (enabled = true) => {
   const [auditions, setAuditions] = useState<Audition[]>([]);
   const [activeAuditionId, setActiveAuditionId] = useState<string | null>(localStorage.getItem('activeAuditionId'));
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const migrateLegacyCandidates = async (targetAuditionId: string) => {
     const orphanQuery = query(collection(db, 'candidates'), where('auditionId', '==', null));
@@ -39,36 +40,49 @@ export const useAuditions = () => {
   };
 
   useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
     const auditionsQuery = query(collection(db, 'auditions'), orderBy('createdAt', 'desc'));
 
-    const unsubscribe = onSnapshot(auditionsQuery, async (snapshot) => {
-      const data = snapshot.docs.map((auditionSnapshot) =>
-        mapAuditionRecord(auditionSnapshot.id, auditionSnapshot.data(), ADMIN_PIN),
-      );
+    const unsubscribe = onSnapshot(
+      auditionsQuery,
+      async (snapshot) => {
+        setError(null);
+        const data = snapshot.docs.map((auditionSnapshot) =>
+          mapAuditionRecord(auditionSnapshot.id, auditionSnapshot.data(), ADMIN_PIN),
+        );
 
-      setAuditions(data);
+        setAuditions(data);
 
-      if (data.length === 0 && !isLoading) {
-        const newAudition = await firebaseService.createAudition('기본 오디션');
-        setActiveAuditionId(newAudition.id);
-        await migrateLegacyCandidates(newAudition.id);
-      } else if (data.length > 0) {
-        const hasActiveAudition = activeAuditionId
-          ? data.some((audition) => audition.id === activeAuditionId)
-          : false;
+        if (data.length === 0 && !isLoading) {
+          const newAudition = await firebaseService.createAudition('기본 오디션');
+          setActiveAuditionId(newAudition.id);
+          await migrateLegacyCandidates(newAudition.id);
+        } else if (data.length > 0) {
+          const hasActiveAudition = activeAuditionId
+            ? data.some((audition) => audition.id === activeAuditionId)
+            : false;
 
-        if (!hasActiveAudition) {
-          setActiveAuditionId(data[0].id);
+          if (!hasActiveAudition) {
+            setActiveAuditionId(data[0].id);
+          }
+        } else if (activeAuditionId) {
+          setActiveAuditionId(null);
         }
-      } else if (activeAuditionId) {
-        setActiveAuditionId(null);
-      }
 
-      setIsLoading(false);
-    });
+        setIsLoading(false);
+      },
+      (snapshotError) => {
+        console.error('Firestore 오디션 연결 오류:', snapshotError);
+        setError(snapshotError.message);
+        setIsLoading(false);
+      },
+    );
 
     return () => unsubscribe();
-  }, [activeAuditionId, isLoading]);
+  }, [activeAuditionId, enabled, isLoading]);
 
   useEffect(() => {
     if (activeAuditionId) {
@@ -83,6 +97,7 @@ export const useAuditions = () => {
     auditions,
     activeAuditionId,
     setActiveAuditionId,
-    isLoading,
+    isLoading: enabled ? isLoading : false,
+    error,
   };
 };

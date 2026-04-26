@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
+import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
+import { FirebaseError } from 'firebase/app';
 import type { Audition } from '../types';
 import { ADMIN_PIN } from '../constants/admin';
 import { ADMIN_SESSION_TIMEOUT_MS, isAdminSessionExpired, touchAdminSession, type AdminSessionSnapshot } from '../utils/adminSession.ts';
+import { auth } from '../firebaseConfig.ts';
 
 const AUTH_STORAGE_KEY = 'audition_judge_session';
 const ADMIN_ACTIVITY_EVENTS: Array<keyof WindowEventMap> = ['click', 'keydown', 'mousemove', 'touchstart'];
@@ -97,6 +100,8 @@ export const useAuth = () => {
   const [adminSession, setAdminSession] = useState<AdminSessionSnapshot | null>(initialAuthState.adminSession);
   const [adminTimeoutCount, setAdminTimeoutCount] = useState(0);
   const [currentTimestamp, setCurrentTimestamp] = useState(initialAuthState.currentTimestamp);
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   const clearSession = useCallback((shouldCountTimeout = false) => {
     setJudgeRole(null);
@@ -105,6 +110,36 @@ export const useAuth = () => {
     if (shouldCountTimeout) {
       setAdminTimeoutCount((count) => count + 1);
     }
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(
+      auth,
+      (user) => {
+        if (user) {
+          setAuthError(null);
+          setIsLoadingAuth(false);
+          return;
+        }
+
+        signInAnonymously(auth).catch((error: unknown) => {
+          if (error instanceof FirebaseError && error.code === 'auth/admin-restricted-operation') {
+            setAuthError('Firebase Anonymous 인증이 비활성화되어 있습니다. Firebase 콘솔에서 Anonymous provider를 활성화해 주세요.');
+            setIsLoadingAuth(false);
+            return;
+          }
+
+          setAuthError(error instanceof Error ? error.message : 'Firebase 인증을 시작하지 못했습니다.');
+          setIsLoadingAuth(false);
+        });
+      },
+      (error) => {
+        setAuthError(error.message);
+        setIsLoadingAuth(false);
+      },
+    );
+
+    return () => unsubscribe();
   }, []);
 
   useEffect(() => {
@@ -214,7 +249,8 @@ export const useAuth = () => {
   return {
     judgeRole,
     isAdmin: adminSession !== null,
-    isLoadingAuth: false,
+    isLoadingAuth,
+    authError,
     adminTimeoutCount,
     adminSessionRemainingMs:
       adminSession === null ? 0 : Math.max(0, adminSession.lastActivityAt + ADMIN_SESSION_TIMEOUT_MS - currentTimestamp),

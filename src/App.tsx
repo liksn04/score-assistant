@@ -62,7 +62,7 @@ const App: React.FC = () => {
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
   const { showToast } = useToast();
-  const { judgeRole, isAdmin, isLoadingAuth, loginWithPin, loginAdmin, logout, adminTimeoutCount, adminSessionRemainingMs } =
+  const { judgeRole, isAdmin, isLoadingAuth, authError, loginWithPin, loginAdmin, logout, adminTimeoutCount, adminSessionRemainingMs } =
     useAuth();
   const currentJudge = judgeRole;
   const effectiveView: AppView =
@@ -71,7 +71,13 @@ const App: React.FC = () => {
       : currentView === 'judge' && !currentJudge
         ? 'landing'
         : currentView;
-  const { auditions, activeAuditionId, setActiveAuditionId, isLoading: isAuditionLoading } = useAuditions();
+  const {
+    auditions,
+    activeAuditionId,
+    setActiveAuditionId,
+    isLoading: isAuditionLoading,
+    error: auditionError,
+  } = useAuditions(!isLoadingAuth && !authError);
   const activeAudition = auditions.find((audition) => audition.id === activeAuditionId) ?? null;
   const { candidates, sortedCandidates, isLoading: isCandidatesLoading } = useCandidates(activeAudition);
   const { logs } = useAdminLogs(activeAuditionId);
@@ -322,6 +328,32 @@ const App: React.FC = () => {
 
     return '읽기 전용';
   };
+
+  const startupError = authError ?? auditionError;
+
+  if (startupError) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'var(--background)',
+          color: 'white',
+          padding: '1.5rem',
+        }}
+      >
+        <div className="glass-card fade-in" style={{ maxWidth: '520px', padding: '2rem', textAlign: 'center' }}>
+          <h1 style={{ fontSize: '1.45rem', marginBottom: '0.8rem' }}>시스템 연결을 확인해 주세요</h1>
+          <p style={{ color: 'var(--text-muted)', lineHeight: 1.6 }}>
+            Firestore 권한 또는 Firebase 인증 설정 때문에 운영 데이터를 불러오지 못했습니다.
+          </p>
+          <p style={{ color: '#fca5a5', marginTop: '1rem', wordBreak: 'break-word' }}>{startupError}</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isLoadingAuth || isAuditionLoading || isCandidatesLoading) {
     return (

@@ -547,7 +547,20 @@ const App: React.FC = () => {
 
           <div className="judge-selection">
             {activeAudition?.judges?.map((judge) => (
-              <div key={judge.name} className="glass-card judge-card hover-lift" onClick={() => setSelectedJudgeToAuth(judge)}>
+              <div
+                key={judge.name}
+                className="glass-card judge-card hover-lift"
+                role="button"
+                tabIndex={0}
+                aria-label={`${judge.name} ${judge.type === 'observer' ? '참관 모드' : '심사위원'} 입장`}
+                onClick={() => setSelectedJudgeToAuth(judge)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    setSelectedJudgeToAuth(judge);
+                  }
+                }}
+              >
                 <div>
                   <span className="judge-card__type">
                     {judge.type === 'observer' ? '참관 모드' : judge.type === 'simple' ? '총점 평가' : '세부 평가'}

@@ -1,12 +1,15 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Lock, X, Loader2, ShieldCheck } from 'lucide-react';
 import ModalPortal from '../common/ModalPortal';
+import { normalizePinInput } from '../../utils/pinUtils';
 
 interface PinModalProps {
   title: string;
   onVerify: (pin: string) => Promise<boolean>;
   onClose: () => void;
 }
+
+const PIN_LENGTH = 6;
 
 const PinModal: React.FC<PinModalProps> = ({ title, onVerify, onClose }) => {
   const [pin, setPin] = useState('');
@@ -26,14 +29,16 @@ const PinModal: React.FC<PinModalProps> = ({ title, onVerify, onClose }) => {
     setTimeout(() => setIsShake(false), 500);
   }, []);
 
-  const handleSubmit = useCallback(async (e?: React.FormEvent) => {
+  const handleSubmit = useCallback(async (nextPin = pin, e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (pin.length !== 6) return;
+
+    const normalizedPin = normalizePinInput(nextPin).slice(0, PIN_LENGTH);
+    if (isLoading || normalizedPin.length !== PIN_LENGTH) return;
 
     setError(null);
     setIsLoading(true);
     try {
-      const success = await onVerify(pin);
+      const success = await onVerify(normalizedPin);
       if (!success) {
         triggerShake();
         setError('PIN 번호가 일치하지 않습니다.');
@@ -47,13 +52,18 @@ const PinModal: React.FC<PinModalProps> = ({ title, onVerify, onClose }) => {
     } finally {
       setIsLoading(false);
     }
-  }, [onVerify, pin, triggerShake]);
+  }, [isLoading, onVerify, pin, triggerShake]);
 
   useEffect(() => {
-    if (pin.length === 6) {
-      void handleSubmit();
+    if (pin.length === PIN_LENGTH && !isLoading) {
+      void handleSubmit(pin);
     }
-  }, [handleSubmit, pin]);
+  }, [handleSubmit, isLoading, pin]);
+
+  const handlePinChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setError(null);
+    setPin(normalizePinInput(event.target.value).slice(0, PIN_LENGTH));
+  };
 
   return (
     <ModalPortal>
@@ -94,13 +104,14 @@ const PinModal: React.FC<PinModalProps> = ({ title, onVerify, onClose }) => {
               <h2 style={{ fontSize: '1.75rem', margin: '0.9rem 0 0.55rem', letterSpacing: '-0.5px' }}>{title}</h2>
             </div>
 
-            <form onSubmit={handleSubmit} style={{ position: 'relative' }}>
+            <form onSubmit={(event) => void handleSubmit(pin, event)} style={{ position: 'relative' }}>
               <div
                 onClick={() => inputRef.current?.focus()}
+                className="pin-entry-shell"
                 style={{ cursor: 'text', marginBottom: '1.5rem' }}
               >
-                <div style={{ display: 'flex', justifyContent: 'center', gap: '0.7rem' }}>
-                  {[...Array(6)].map((_, index) => {
+                <div className="pin-digit-row">
+                  {[...Array(PIN_LENGTH)].map((_, index) => {
                     const isActive = index === pin.length;
                     const isFilled = index < pin.length;
 
@@ -150,11 +161,17 @@ const PinModal: React.FC<PinModalProps> = ({ title, onVerify, onClose }) => {
                   type="password"
                   inputMode="numeric"
                   pattern="[0-9]*"
-                  maxLength={6}
+                  maxLength={PIN_LENGTH}
+                  autoComplete="one-time-code"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  enterKeyHint="done"
+                  aria-label="6자리 PIN 번호"
+                  spellCheck={false}
                   autoFocus
-                  style={{ position: 'absolute', opacity: 0, width: '1px', height: '1px' }}
+                  className="pin-hidden-input"
                   value={pin}
-                  onChange={(e) => setPin(e.target.value.replace(/[^0-9]/g, ''))}
+                  onChange={handlePinChange}
                   disabled={isLoading}
                 />
               </div>
@@ -180,7 +197,7 @@ const PinModal: React.FC<PinModalProps> = ({ title, onVerify, onClose }) => {
                 type="submit"
                 className="premium-button"
                 style={{ width: '100%', height: '56px', borderRadius: '16px', fontSize: '1rem' }}
-                disabled={isLoading || pin.length !== 6}
+                disabled={isLoading || pin.length !== PIN_LENGTH}
               >
                 {isLoading ? <Loader2 size={24} className="animate-spin" style={{ margin: '0 auto' }} /> : '접속하기'}
               </button>

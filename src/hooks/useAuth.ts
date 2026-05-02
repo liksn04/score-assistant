@@ -4,6 +4,7 @@ import { FirebaseError } from 'firebase/app';
 import type { Audition } from '../types';
 import { ADMIN_PIN } from '../constants/admin';
 import { ADMIN_SESSION_TIMEOUT_MS, isAdminSessionExpired, touchAdminSession, type AdminSessionSnapshot } from '../utils/adminSession.ts';
+import { normalizePinInput } from '../utils/pinUtils.ts';
 import { auth } from '../firebaseConfig.ts';
 
 const AUTH_STORAGE_KEY = 'audition_judge_session';
@@ -189,8 +190,9 @@ export const useAuth = () => {
   const loginWithPin = useCallback(async (judgeName: string, pin: string, audition: Audition) => {
     await new Promise((resolve) => window.setTimeout(resolve, 500));
 
+    const submittedPin = normalizePinInput(pin);
     const judgeConfig = audition.judges.find((judge) => judge.name === judgeName);
-    if (!judgeConfig || judgeConfig.pin !== pin) {
+    if (!judgeConfig || normalizePinInput(judgeConfig.pin) !== submittedPin) {
       throw new Error('PIN 번호가 일치하지 않습니다.');
     }
 
@@ -211,7 +213,7 @@ export const useAuth = () => {
   const loginAdmin = useCallback(async (pin: string) => {
     await new Promise((resolve) => window.setTimeout(resolve, 500));
 
-    if (pin !== ADMIN_PIN) {
+    if (normalizePinInput(pin) !== normalizePinInput(ADMIN_PIN)) {
       throw new Error('관리자 PIN이 일치하지 않습니다.');
     }
 

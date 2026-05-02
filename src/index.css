@@ -27,6 +27,13 @@
   font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
 }
 
+html {
+  width: 100%;
+  min-width: 0;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
   background-color: var(--background);
   background-image: 
@@ -37,6 +44,28 @@ body {
   line-height: 1.6;
   overflow-x: hidden;
   width: 100%;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button,
+select,
+input,
+textarea,
+[role='button'] {
+  touch-action: manipulation;
+}
+
+img,
+svg,
+canvas,
+video {
+  max-width: 100%;
 }
 
 .container {
@@ -73,6 +102,7 @@ body {
   transition: all 0.2s ease;
   outline: none;
   width: 100%;
+  min-width: 0;
 }
 
 .premium-input:focus {
@@ -95,6 +125,8 @@ body {
   justify-content: center;
   gap: 0.5rem;
   white-space: nowrap;
+  min-height: 44px;
+  min-width: 0;
 }
 
 .premium-button:hover {
@@ -128,6 +160,12 @@ body {
   -webkit-text-fill-color: transparent;
   letter-spacing: -2px;
   margin-bottom: 0.5rem;
+}
+
+.landing-page,
+.dashboard,
+.admin-shell {
+  min-width: 0;
 }
 
 .landing-hero {
@@ -284,6 +322,15 @@ body {
   flex-direction: column;
   gap: 1rem;
   justify-content: space-between;
+}
+
+.judge-card:focus-visible {
+  outline: 3px solid rgba(129, 140, 248, 0.7);
+  outline-offset: 3px;
+}
+
+.judge-card:active {
+  transform: scale(0.99);
 }
 
 .judge-card__type {
@@ -1229,9 +1276,12 @@ body {
   }
 
   .landing-hero,
-  .landing-control-grid,
   .modal-body-grid {
     grid-template-columns: 1fr;
+  }
+
+  .landing-control-grid {
+    grid-template-columns: 1fr !important;
   }
 
   .admin-summary-grid,
@@ -1258,14 +1308,43 @@ body {
   .main-title {
     font-size: 2.5rem;
     letter-spacing: -1px;
+    line-height: 1.1;
   }
 
   .glass-card {
     padding: 1.25rem;
   }
 
+  .landing-hero__content,
+  .landing-hero__focus,
+  .landing-operations {
+    padding: 1.35rem !important;
+  }
+
   .landing-hero {
     margin-top: 0.5rem;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .landing-focus-name {
+    font-size: 1.25rem;
+    word-break: keep-all;
+    overflow-wrap: anywhere;
+  }
+
+  .info-chip-row {
+    gap: 0.55rem;
+  }
+
+  .info-chip {
+    flex: 1 1 calc(50% - 0.55rem);
+    justify-content: center;
+    min-height: 42px;
+  }
+
+  .landing-operations {
+    margin-bottom: 1.6rem;
   }
 
   .landing-operations__header,
@@ -1276,6 +1355,28 @@ body {
   .modal-action-bar {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .status-badge {
+    max-width: 100%;
+    white-space: normal;
+    line-height: 1.35;
+  }
+
+  .stat-tile {
+    min-height: 88px;
+  }
+
+  .stat-tile__icon {
+    width: 44px;
+    height: 44px;
+  }
+
+  .action-stack .premium-button,
+  .admin-hero__actions .premium-button,
+  .admin-action-card .premium-button,
+  .modal-action-bar .premium-button {
+    width: 100%;
   }
 
   .modal-content {
@@ -1292,6 +1393,27 @@ body {
 
   .judge-card__action {
     width: 100%;
+  }
+
+  .admin-hero__actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .admin-section-nav {
+    margin-inline: -1.25rem;
+    padding-inline: 1.25rem;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .admin-section-nav__item {
+    flex: 0 0 auto;
+    scroll-snap-align: start;
+    min-height: 44px;
   }
 
   .dashboard-header {
@@ -1316,8 +1438,32 @@ body {
     flex-direction: column;
   }
 
+  .admin-search {
+    min-width: 0;
+    width: 100%;
+  }
+
   .admin-filter-select {
     width: 100%;
+  }
+
+  .admin-progress-bar {
+    width: 100%;
+  }
+
+  .admin-candidate-row__main {
+    width: 100%;
+  }
+
+  .admin-candidate-row__meta {
+    width: 100%;
+    align-items: stretch;
+  }
+
+  .admin-row-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr;
   }
 
   .logout-btn {
@@ -1363,7 +1509,7 @@ body {
 
 @media (max-width: 480px) {
   .main-title {
-    font-size: 2rem;
+    font-size: 2.05rem;
   }
 
   .container {
@@ -1373,6 +1519,52 @@ body {
   .glass-card {
     padding: 1rem;
     border-radius: 16px;
+  }
+
+  .landing-hero__content,
+  .landing-hero__focus,
+  .landing-operations {
+    padding: 1.1rem !important;
+  }
+
+  .landing-kicker,
+  .section-kicker,
+  .modal-kicker {
+    font-size: 0.72rem;
+    letter-spacing: 0.02em;
+  }
+
+  .landing-operations__header h2 {
+    font-size: 1.35rem !important;
+    line-height: 1.25;
+  }
+
+  .info-chip {
+    flex-basis: 100%;
+    justify-content: flex-start;
+  }
+
+  .judge-section-header {
+    margin-bottom: 1rem;
+  }
+
+  .judge-card {
+    min-height: 0;
+    gap: 0.85rem;
+  }
+
+  .judge-card__title {
+    font-size: 1.25rem;
+  }
+
+  .judge-card__action {
+    min-height: 46px;
+  }
+
+  .admin-hero,
+  .admin-panel,
+  .admin-action-card {
+    gap: 1rem;
   }
 
   .modal-overlay-shell {
@@ -1413,15 +1605,81 @@ body {
     font-size: 1rem !important;
   }
 
+  .premium-input,
+  .premium-button,
+  textarea {
+    font-size: 1rem;
+  }
+
   .premium-button {
     padding: 0.7rem 1.2rem;
-    font-size: 0.9rem;
+    min-height: 46px;
+  }
+
+  .pin-digit-row {
+    gap: 0.42rem;
   }
 }
 
 @media (max-width: 430px) {
   .container {
     padding: 0.85rem;
+  }
+
+  .landing-hero__content,
+  .landing-hero__focus,
+  .landing-operations {
+    border-radius: 18px;
+  }
+
+  .landing-hero__content p {
+    font-size: 0.92rem;
+    line-height: 1.55;
+  }
+
+  .judge-selection {
+    gap: 0.85rem;
+  }
+
+  .judge-card {
+    padding: 1rem !important;
+    border-radius: 18px;
+  }
+
+  .judge-card__type {
+    font-size: 0.72rem;
+  }
+
+  .modal-overlay-shell {
+    align-items: flex-start;
+    padding: max(0.75rem, env(safe-area-inset-top)) max(0.75rem, env(safe-area-inset-right)) max(0.75rem, env(safe-area-inset-bottom)) max(0.75rem, env(safe-area-inset-left));
+    overflow-y: auto;
+  }
+
+  .modal-surface {
+    max-width: 100% !important;
+    margin: auto 0;
+  }
+
+  .modal-content {
+    padding: 1.3rem 1rem 1rem !important;
+  }
+
+  .pin-digit-row {
+    gap: 0.32rem;
+  }
+
+  .pin-digit-row > div {
+    width: clamp(38px, 13vw, 48px) !important;
+    height: clamp(52px, 15vw, 62px) !important;
+    border-radius: 12px !important;
+  }
+
+  .modal-close-button {
+    top: 0.75rem;
+    right: 0.75rem;
+    width: 42px;
+    height: 42px;
   }
 
   .dashboard {
@@ -1470,11 +1728,79 @@ body {
     gap: 1rem !important;
   }
 
+  .admin-topbar__meta {
+    width: 100%;
+  }
+
+  .admin-topbar__meta .status-badge {
+    width: 100%;
+  }
+
+  .admin-hero__eyebrow {
+    letter-spacing: 0.12em;
+  }
+
+  .admin-hero__description {
+    font-size: 0.9rem;
+    line-height: 1.55;
+  }
+
+  .admin-summary-grid {
+    gap: 0.7rem;
+  }
+
+  .admin-summary-card {
+    padding: 0.9rem;
+  }
+
+  .admin-field-card,
+  .admin-action-card,
+  .admin-panel {
+    border-radius: 18px;
+  }
+
+  .admin-candidate-row,
+  .admin-list-row {
+    padding: 0.95rem;
+    border-radius: 16px;
+  }
+
+  .admin-candidate-row__main {
+    gap: 0.75rem;
+  }
+
+  .admin-candidate-row__title .status-badge {
+    width: auto;
+  }
+
+  .admin-rank-pill {
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+  }
+
+  .admin-row-actions .premium-button,
+  .admin-candidate-row__meta .premium-button {
+    width: 100%;
+  }
+
   .dashboard-form-card,
   .active-judges-card,
   .leaderboard-section,
   .statistics-panel {
     padding: 1rem !important;
+  }
+
+  .dashboard-form-card {
+    order: 2;
+  }
+
+  .dashboard-workflow {
+    order: 1;
+  }
+
+  .dashboard-sidepanel {
+    order: 3;
   }
 
   .dashboard-card-title-row {
@@ -1511,6 +1837,7 @@ body {
 
   .candidate-row {
     padding: 1rem !important;
+    scroll-margin-top: 0.75rem;
   }
 
   .candidate-row-header {
@@ -1554,6 +1881,10 @@ body {
     justify-content: space-between;
   }
 
+  .candidate-actions .premium-button {
+    flex: 1;
+  }
+
   .candidate-delete-btn {
     padding: 0.45rem 0.55rem !important;
     border: 1px solid rgba(244, 63, 94, 0.18) !important;
@@ -1567,6 +1898,12 @@ body {
     gap: 0.75rem !important;
   }
 
+  .simple-score-entry .score-input {
+    width: 100% !important;
+    max-width: 180px;
+    text-align: center !important;
+  }
+
   .simple-score-label {
     font-size: 0.9rem !important;
   }
@@ -1576,11 +1913,21 @@ body {
     flex-wrap: wrap;
   }
 
+  .simple-strike-row > div {
+    min-height: 38px;
+    align-items: center;
+  }
+
   .criterion-card {
     flex-direction: column;
     align-items: stretch !important;
     gap: 0.65rem;
     padding: 0.75rem !important;
+  }
+
+  .criterion-card > label {
+    font-size: 0.92rem !important;
+    line-height: 1.4;
   }
 
   .criterion-controls {
@@ -1589,7 +1936,19 @@ body {
   }
 
   .criterion-input {
-    width: 72px !important;
+    width: 86px !important;
+    min-height: 44px;
+  }
+
+  .score-input {
+    min-height: 44px;
+    font-size: 1rem !important;
+  }
+
+  .simple-strike-row button,
+  .criterion-controls button {
+    min-width: 38px;
+    min-height: 38px;
   }
 
   .comment-entry {
@@ -1603,6 +1962,10 @@ body {
 
   .comment-input-row {
     flex-direction: column;
+  }
+
+  .comment-input-row .premium-input {
+    min-height: 46px;
   }
 
   .comment-send-btn {
@@ -1631,6 +1994,14 @@ body {
 
   .leaderboard-average-pill {
     align-self: center;
+  }
+
+  .leaderboard-mobile-card {
+    padding: 0.9rem;
+  }
+
+  .leaderboard-mobile-meta span {
+    overflow-wrap: anywhere;
   }
 
   .statistics-overview-card,
@@ -1749,6 +2120,36 @@ body {
   height: 24px;
   background-color: var(--primary);
   animation: blink 1s infinite;
+}
+
+.pin-entry-shell {
+  position: relative;
+  touch-action: manipulation;
+}
+
+.pin-digit-row {
+  display: flex;
+  justify-content: center;
+  gap: 0.7rem;
+}
+
+.pin-hidden-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 18px;
+  background: transparent;
+  color: transparent;
+  caret-color: transparent;
+  font-size: 16px;
+  opacity: 0.01;
+  outline: none;
+}
+
+.pin-hidden-input:disabled {
+  cursor: wait;
 }
 
 .glass-card-premium {

@@ -165,6 +165,9 @@ const CandidateScoreCard: React.FC<CandidateScoreCardProps> = ({
               <label className="simple-score-label" style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>총점 입력 (0~100):</label>
               <input 
                 type="number"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                aria-label={`${candidate.name} 총점 입력`}
                 className="premium-input score-input"
                 style={{ width: '80px', textAlign: 'center' }}
                 placeholder="0"
@@ -214,6 +217,9 @@ const CandidateScoreCard: React.FC<CandidateScoreCardProps> = ({
                 <div className="criterion-controls" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                   <input 
                     type="number" 
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    aria-label={`${candidate.name} ${criterion.item} 점수 입력`}
                     className="premium-input score-input criterion-input" 
                     style={{ width: '60px', padding: '6px', textAlign: 'center', fontSize: '0.9rem' }} 
                     min="0" 

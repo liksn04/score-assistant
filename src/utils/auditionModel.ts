@@ -1,4 +1,5 @@
 import { DEFAULT_RANKING_POLICY, normalizeRankingPolicy } from './rankingUtils.ts';
+import { normalizePinInput } from './pinUtils.ts';
 import type { Audition, Candidate, EvaluationScores, FinalizationState, JudgeConfig, TimestampLike, TrashBatch } from '../types';
 
 export const createDefaultFinalizationState = (): FinalizationState => ({
@@ -13,7 +14,7 @@ export const sanitizeJudgeConfigs = (judges: JudgeConfig[]): JudgeConfig[] =>
   judges.map((judge) => {
     const baseJudge = {
       name: judge.name.trim(),
-      pin: judge.pin.trim(),
+      pin: normalizePinInput(judge.pin),
       type: judge.type,
     };
 
